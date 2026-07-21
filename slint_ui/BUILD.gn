@@ -1,0 +1,53 @@
+# Copyright (c) 2025 vivo Mobile Communication Co., Ltd.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("//build/boards/${board}.gni")
+import("//build/templates/reload_autoconf_and_build.gni")
+import("//build/templates/rust.gni")
+import("//build/toolchain/blueos.gni")
+
+_slint_ui_generated = "${target_gen_dir}/slint_ui_main_window.rs"
+
+action("generate_slint_ui") {
+  script = "//build/scripts/run_slint_cli.py"
+  inputs = [ "app.slint" ]
+  outputs = [ _slint_ui_generated ]
+  args = [
+    "--embed-resources",
+    "software-renderer",
+    "--output",
+    rebase_path(_slint_ui_generated),
+    rebase_path(inputs[0]),
+  ]
+}
+
+reload_autoconf_and_build("slint_ui_example") {
+  app_conf = [ "app.conf" ]
+  crate_name = "slint_ui_example"
+  crate_type = "bin"
+
+  sources = [ "src/main.rs" ]
+  inputs = [ _slint_ui_generated ]
+  rustenv = [ "SLINT_UI_GENERATED=" + rebase_path(_slint_ui_generated) ]
+  deps = [
+    ":generate_slint_ui",
+    "//external/vendor/libm-0.2.16:libm",
+    "//external/vendor/slint-1.17.1:slint",
+    "//kernel/rsrt:rsrt_std",
+    "//libc",
+    "//librs",
+  ]
+  linker_script = default_linker_script
+  configs = [ "//build/boards/${board}:kernel_config" ]
+}
