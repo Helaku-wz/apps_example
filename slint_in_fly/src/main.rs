@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![allow(internal_features)]
 #![feature(cfg_boolean_literals)]
+#![feature(core_intrinsics)]
 #![no_main]
 
 extern crate libm;
@@ -63,9 +65,16 @@ unsafe impl GlobalAlloc for AllocMemAllocator {
 #[global_allocator]
 static GLOBAL_ALLOCATOR: AllocMemAllocator = AllocMemAllocator;
 
+// Reached when a panic unwinds under `-Cpanic=abort` (rustc lowers every panic
+// to a call of this C-ABI symbol), or when C glue (libm/libatomic/slint) calls
+// abort() directly. Must trap immediately without going through the panic
+// machinery — otherwise `unreachable!()`/`panic!` here would re-enter abort()
+// and overflow the stack. `core::intrinsics::abort` lowers to a trap
+// instruction (EBREAK/`unimp` on RISC-V, UDF on ARM), matching the kernel's
+// authoritative definition in kernel/infra/src/string.rs.
 #[no_mangle]
 pub extern "C" fn abort() -> ! {
-    unreachable!()
+    core::intrinsics::abort();
 }
 
 // RV32IMC has no A extension. The linked libatomic implementation serializes
