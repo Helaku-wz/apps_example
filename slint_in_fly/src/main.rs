@@ -421,8 +421,9 @@ impl slint::platform::Platform for BluekernelBackend {
 
     fn run_event_loop(&self) -> Result<(), slint::PlatformError> {
         let mut fb = FbFile::open().map_err(|err| slint::PlatformError::Other(err.to_string()))?;
-    
+        
         loop {
+            println!("Running slint event loop iteration");
             slint::platform::update_timers_and_animations();
 
             if let Some(window) = self.window.borrow().clone() {
