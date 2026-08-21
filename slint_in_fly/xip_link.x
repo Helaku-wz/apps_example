@@ -20,7 +20,10 @@ MEMORY
 {
   IROM (rx) : ORIGIN = 0x42200000, LENGTH = 0x100000
   RODATA (r) : ORIGIN = 0x3c100000, LENGTH = 0x100000
-  RWDATA (rw) : ORIGIN = 0x3FCCE800, LENGTH = 0x8000
+  RWDATA (rw) : ORIGIN = 0x3FCCE800, LENGTH = 0x10000
+  /* Keep the first 16KB for initialized and zero-initialized data, and reserve
+   * the remaining 48KB for the application's global allocator. */
+  HEAP (rw) : ORIGIN = ORIGIN(RWDATA) + 0x4000, LENGTH = 0xC000
 }
 
 PHDRS
@@ -86,6 +89,13 @@ SECTIONS
     *(COMMON)
   } > RWDATA :data
 
+  .heap (NOLOAD) : ALIGN(8)
+  {
+    __heap_start = .;
+    . = . + LENGTH(HEAP);
+    __heap_end = .;
+  } > HEAP :data
+
   /DISCARD/ :
   {
     *(.eh_frame*)
@@ -103,6 +113,8 @@ SECTIONS
   ASSERT(ADDR(.text) + SIZEOF(.text) <= ORIGIN(IROM) + LENGTH(IROM),
          "XIP text exceeds its flash page")
   ASSERT(SIZEOF(.rodata) <= LENGTH(RODATA), "XIP rodata exceeds its flash page")
-  ASSERT(SIZEOF(.data) + SIZEOF(.bss) <= LENGTH(RWDATA),
-         "XIP writable data exceeds its SRAM region")
+  ASSERT(ADDR(.bss) + SIZEOF(.bss) <= ORIGIN(HEAP),
+         "XIP writable data exceeds its 16KB SRAM region")
+  ASSERT(SIZEOF(.heap) == LENGTH(HEAP),
+         "XIP heap is not the expected 48KB")
 }

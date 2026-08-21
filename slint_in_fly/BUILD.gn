@@ -44,6 +44,8 @@ reload_autoconf_and_build("slint_in_fly") {
     ":generate_slint_ui",
     "//external/vendor/libm-0.2.16:libm",
     "//external/vendor/slint-1.17.1:slint",
+    "//external/vendor/linked_list_allocator-0.10.6:linked_list_allocator",
+    "//external/vendor/spin-0.9.8:spin",
     "//libc",
     "//librs:librs_swi",
     "//external/vendor/portable-atomic-1.13.1:portable_atomic",

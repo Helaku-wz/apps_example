@@ -27,9 +27,12 @@ mod math;
 
 use crate::app_window::MainWindow;
 use core::alloc::{GlobalAlloc, Layout};
+use core::ptr::NonNull;
 use core::sync::atomic::{compiler_fence, Ordering};
 use librs::{c_str::CStr, syscall::Syscall};
+use linked_list_allocator::Heap;
 use slint::platform::software_renderer::{LineBufferProvider, Rgb565Pixel};
+use spin::Mutex;
 use std::cell::RefCell;
 use std::io::{Error, ErrorKind, Result as IoResult};
 use std::rc::Rc;
@@ -40,30 +43,69 @@ const LCD_V_RES: u16 = 480;
 const FRAME_DELAY_MS: libc::c_uint = 16;
 const UI_THREAD_STACK_SIZE: usize = 64 * 1024;
 
-struct AllocMemAllocator;
+const HEAP_SIZE: usize = 48 * 1024;
 
-unsafe impl GlobalAlloc for AllocMemAllocator {
-    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        let mut ptr = core::ptr::null_mut();
-        let result = librs::stdlib::malloc::posix_memalign(
-            &mut ptr,
-            layout.align(),
-            layout.size(),
-        );
-        if result == 0 {
-            ptr.cast()
-        } else {
-            core::ptr::null_mut()
+extern "C" {
+    static __heap_start: u8;
+    static __heap_end: u8;
+}
+
+struct HeapAllocator {
+    heap: Mutex<Heap>,
+}
+
+impl HeapAllocator {
+    const fn new() -> Self {
+        Self {
+            heap: Mutex::new(Heap::empty()),
         }
     }
 
-    unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
-        librs::stdlib::malloc::free(ptr.cast::<libc::c_void>());
+    fn initialize(&self, heap: &mut Heap) -> bool {
+        if !heap.bottom().is_null() {
+            return true;
+        }
+
+        let start = core::ptr::addr_of!(__heap_start) as *mut u8;
+        let end = core::ptr::addr_of!(__heap_end) as usize;
+        let size = end.saturating_sub(start as usize);
+        if size != HEAP_SIZE {
+            return false;
+        }
+
+        // The linker script reserves this range exclusively for the allocator.
+        unsafe { heap.init(start, size) };
+        true
+    }
+}
+
+unsafe impl GlobalAlloc for HeapAllocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        let mut heap = self.heap.lock();
+        if !self.initialize(&mut heap) {
+            return core::ptr::null_mut();
+        }
+        heap.allocate_first_fit(layout)
+            .map_or(core::ptr::null_mut(), |ptr| ptr.as_ptr())
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        if ptr.is_null() {
+            return;
+        }
+
+        let mut heap = self.heap.lock();
+        if heap.bottom().is_null() {
+            return;
+        }
+
+        // Every non-null pointer passed here came from `allocate_first_fit`.
+        heap.deallocate(NonNull::new_unchecked(ptr), layout);
     }
 }
 
 #[global_allocator]
-static GLOBAL_ALLOCATOR: AllocMemAllocator = AllocMemAllocator;
+static GLOBAL_ALLOCATOR: HeapAllocator = HeapAllocator::new();
 
 // Reached when a panic unwinds under `-Cpanic=abort` (rustc lowers every panic
 // to a call of this C-ABI symbol), or when C glue (libm/libatomic/slint) calls
@@ -421,7 +463,7 @@ impl slint::platform::Platform for BluekernelBackend {
 
     fn run_event_loop(&self) -> Result<(), slint::PlatformError> {
         let mut fb = FbFile::open().map_err(|err| slint::PlatformError::Other(err.to_string()))?;
-        
+
         loop {
             println!("Running slint event loop iteration");
             slint::platform::update_timers_and_animations();
@@ -441,7 +483,7 @@ impl slint::platform::Platform for BluekernelBackend {
                 let _ = librs::time::msleep(FRAME_DELAY_MS);
             }
         }
-    }  
+    }
 }
 
 fn run_slint_ui() -> IoResult<()> {
@@ -459,9 +501,11 @@ pub extern "C" fn _start() -> u32 {
     let ui_thread = thread::Builder::new()
         .name("slint-ui".to_string())
         .stack_size(UI_THREAD_STACK_SIZE)
-        .spawn(run_slint_ui).unwrap();
+        .spawn(run_slint_ui)
+        .unwrap();
     ui_thread
         .join()
-        .map_err(|_| Error::new(ErrorKind::Other, "slint ui thread panicked")).unwrap();
+        .map_err(|_| Error::new(ErrorKind::Other, "slint ui thread panicked"))
+        .unwrap();
     0
 }
