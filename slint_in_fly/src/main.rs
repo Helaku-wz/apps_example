@@ -498,14 +498,6 @@ fn run_slint_ui() -> IoResult<()> {
 
 #[no_mangle]
 pub extern "C" fn _start() -> u32 {
-    let ui_thread = thread::Builder::new()
-        .name("slint-ui".to_string())
-        .stack_size(UI_THREAD_STACK_SIZE)
-        .spawn(run_slint_ui)
-        .unwrap();
-    ui_thread
-        .join()
-        .map_err(|_| Error::new(ErrorKind::Other, "slint ui thread panicked"))
-        .unwrap();
+    run_slint_ui();
     0
 }
