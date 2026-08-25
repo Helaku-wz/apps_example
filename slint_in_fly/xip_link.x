@@ -19,7 +19,7 @@ ENTRY(_start)
 MEMORY
 {
   IROM (rx) : ORIGIN = 0x42200000, LENGTH = 0x100000
-  RODATA (r) : ORIGIN = 0x3c100000, LENGTH = 0x100000
+  RODATA (r) : ORIGIN = 0x3c140000, LENGTH = 0x100000
   RWDATA (rw) : ORIGIN = 0x3FCCE800, LENGTH = 0x10000
   /* Keep the first 16KB for initialized and zero-initialized data, and reserve
    * the remaining 48KB for the application's global allocator. */
