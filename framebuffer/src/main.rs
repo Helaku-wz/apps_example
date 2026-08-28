@@ -21,10 +21,10 @@ use embedded_graphics::{
     primitives::{PrimitiveStyle, Rectangle},
 };
 use embedded_graphics_core::{
+    Pixel,
     draw_target::DrawTarget,
     geometry::OriginDimensions,
-    pixelcolor::{raw::ToBytes, Rgb565, RgbColor},
-    Pixel,
+    pixelcolor::{Rgb565, RgbColor, raw::ToBytes},
 };
 use librs::{c_str::CStr, syscall::Syscall};
 use std::io::{Error, ErrorKind, Result};
@@ -212,6 +212,37 @@ impl DrawTarget for FbFile {
     type Error = Error;
     type Color = Rgb565;
 
+    fn clear(&mut self, color: Self::Color) -> Result<()> {
+        let pixel = match self.pixel_format {
+            PixelFormat::Rgb565 => color.to_be_bytes().to_vec(),
+            PixelFormat::Bgra8888 => rgb565_to_bgra8888(color).to_vec(),
+        };
+        let row_len = usize::try_from(self.variable_info.xres)
+            .ok()
+            .and_then(|width| width.checked_mul(pixel.len()))
+            .ok_or_else(|| Error::from_raw_os_error(libc::EINVAL))?;
+        let mut row = Vec::with_capacity(row_len);
+        for _ in 0..self.variable_info.xres {
+            row.extend_from_slice(&pixel);
+        }
+
+        for y in 0..self.variable_info.yres {
+            let offset = u64::from(y)
+                .checked_mul(u64::from(self.fixed_info.line_length))
+                .ok_or_else(|| Error::from_raw_os_error(libc::EINVAL))?;
+            if offset > libc::off_t::MAX as u64 {
+                return Err(Error::from_raw_os_error(libc::EINVAL));
+            }
+            let result =
+                librs::syscall::sys::Sys::lseek(self.fd, offset as libc::off_t, libc::SEEK_SET);
+            if result < 0 {
+                return Err(syscall_error(result as libc::c_int));
+            }
+            write_all(self.fd, &row)?;
+        }
+        Ok(())
+    }
+
     fn draw_iter<I>(&mut self, pixels: I) -> Result<()>
     where
         I: IntoIterator<Item = Pixel<Self::Color>>,
@@ -389,7 +420,9 @@ fn run_snake(fb: &mut FbFile) -> Result<()> {
     let mut food_seed = 1;
     let mut food_index = next_food_index(head_index, length, path_len, food_seed);
 
+    println!("Clearing framebuffer...");
     fb.clear(Rgb565::BLACK)?;
+    println!("Framebuffer clear complete");
     draw_cell(
         fb,
         loop_cell(food_index, grid_width, grid_height),
