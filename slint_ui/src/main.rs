@@ -32,44 +32,19 @@ use std::io::{Error, ErrorKind, Result as IoResult};
 use std::rc::Rc;
 use std::thread;
 
-const LCD_H_RES: u16 = 320;
+const LCD_H_RES: u16 = 480;
 const LCD_V_RES: u16 = 480;
 const FRAME_DELAY_MS: libc::c_uint = 16;
 const UI_THREAD_STACK_SIZE: usize = 64 * 1024;
 const TOUCH_REPORT_SIZE: usize = 12;
 const TOUCH_REPORT_VERSION: u8 = 1;
-// FT6336U firmware reports coordinates in the mounted panel's logical direction.
+const TOUCH_DEVICE_PATH: &[u8] = b"/dev/cst9220\0";
+const TOUCH_CONTROLLER_NAME: &str = "CST9220";
+// CST9220 firmware reports coordinates in the mounted panel's logical direction.
 // Do not mirror them again for the LCD controller's hardware scan direction.
 const TOUCH_FLIP_X: bool = false;
 const TOUCH_FLIP_Y: bool = false;
 const TOUCH_SWAP_XY: bool = false;
-const CPU_LOAD_MIN: i32 = 1200;
-const CPU_LOAD_MAX: i32 = 9200;
-const TEMPERATURE_MIN_TENTHS: i32 = 360;
-const TEMPERATURE_MAX_TENTHS: i32 = 580;
-const TEMPERATURE_STEP_TENTHS: i32 = 1;
-const TEMPERATURE_FRAME_DIVIDER: u32 = 2;
-const RAM_LOAD_MIN: i32 = 3000;
-const RAM_LOAD_MAX: i32 = 8200;
-const RAM_LOAD_STEP: i32 = 15;
-const RAM_CAPACITY_KB: i32 = 512;
-const CURRENT_MIN_MA: i32 = 110;
-const CURRENT_MAX_MA: i32 = 260;
-const CURRENT_STEP_MA: i32 = 1;
-const CURRENT_FRAME_DIVIDER: u32 = 2;
-const VOLTAGE_MIN_MV: i32 = 3240;
-const VOLTAGE_MAX_MV: i32 = 3330;
-const VOLTAGE_STEP_MV: i32 = 1;
-const VOLTAGE_FRAME_DIVIDER: u32 = 4;
-const MERCURY_ORBIT_FRAMES: u32 = 72;
-const VENUS_ORBIT_FRAMES: u32 = 96;
-const EARTH_ORBIT_FRAMES: u32 = 128;
-const MARS_ORBIT_FRAMES: u32 = 168;
-const JUPITER_ORBIT_FRAMES: u32 = 240;
-const SATURN_ORBIT_FRAMES: u32 = 300;
-const URANUS_ORBIT_FRAMES: u32 = 360;
-const NEPTUNE_ORBIT_FRAMES: u32 = 420;
-const PLUTO_ORBIT_FRAMES: u32 = 480;
 
 #[derive(Clone, Copy)]
 enum PixelFormat {
@@ -108,7 +83,10 @@ struct TouchReport {
 impl TouchReport {
     fn decode(bytes: &[u8; TOUCH_REPORT_SIZE]) -> IoResult<Self> {
         if bytes[0] != TOUCH_REPORT_VERSION || bytes[1] > 2 {
-            return Err(Error::new(ErrorKind::InvalidData, "invalid FT6336U report"));
+            return Err(Error::new(
+                ErrorKind::InvalidData,
+                "invalid CST9220 touch report",
+            ));
         }
 
         let mut points = [TouchPoint::default(); 2];
@@ -149,7 +127,7 @@ struct TouchFile {
 
 impl TouchFile {
     fn open() -> IoResult<Self> {
-        let path = CStr::from_bytes_with_nul(b"/dev/ft6336u0\0")
+        let path = CStr::from_bytes_with_nul(TOUCH_DEVICE_PATH)
             .map_err(|_| Error::from_raw_os_error(libc::EINVAL))?;
         let fd = librs::syscall::sys::Sys::open(path, libc::O_RDONLY, 0);
         if fd < 0 {
@@ -168,7 +146,7 @@ impl TouchFile {
         let mut bytes = [0u8; TOUCH_REPORT_SIZE];
         match librs::syscall::sys::Sys::read(self.fd, &mut bytes) {
             Ok(TOUCH_REPORT_SIZE) => TouchReport::decode(&bytes),
-            Ok(_) => Err(Error::new(ErrorKind::UnexpectedEof, "short FT6336U report")),
+            Ok(_) => Err(Error::new(ErrorKind::UnexpectedEof, "short CST9220 report")),
             Err(librs::errno::Errno(errno)) => Err(Error::from_raw_os_error(errno)),
         }
     }
@@ -204,8 +182,8 @@ impl TouchFile {
                     }
                 } else {
                     println!(
-                        "FT6336U press: raw=({}, {}), slint=({}, {})",
-                        point.x, point.y, position.x, position.y
+                        "{} press: raw=({}, {}), slint=({}, {})",
+                        TOUCH_CONTROLLER_NAME, point.x, point.y, position.x, position.y
                     );
                     window.dispatch_event(WindowEvent::PointerPressed {
                         position,
@@ -217,7 +195,10 @@ impl TouchFile {
                 self.last_y = position.y;
             }
             None if self.pressed => {
-                println!("FT6336U release: slint=({}, {})", self.last_x, self.last_y);
+                println!(
+                    "{} release: slint=({}, {})",
+                    TOUCH_CONTROLLER_NAME, self.last_x, self.last_y
+                );
                 window.dispatch_event(WindowEvent::PointerReleased {
                     position: slint::LogicalPosition::new(self.last_x, self.last_y),
                     button: PointerEventButton::Left,
@@ -486,207 +467,6 @@ fn syscall_error(ret: libc::c_int) -> Error {
     }
 }
 
-fn advance_fake_value(value: &mut i32, step: &mut i32, min: i32, max: i32) {
-    *value += *step;
-    if *value >= max {
-        *value = max;
-        *step = -*step;
-    } else if *value <= min {
-        *value = min;
-        *step = -*step;
-    }
-}
-
-fn orbit_phase(frame_count: u32, orbit_frames: u32) -> f32 {
-    (frame_count % orbit_frames) as f32 / orbit_frames as f32
-}
-
-struct FakeDataState {
-    ui: Option<slint::Weak<MainWindow>>,
-    frame_count: u32,
-    cpu_load: i32,
-    cpu_target: i32,
-    cpu_target_frames: u32,
-    cpu_display: i32,
-    random_state: u32,
-    temperature_tenths: i32,
-    temperature_step: i32,
-    ram_load: i32,
-    ram_step: i32,
-    ram_display: i32,
-    current_ma: i32,
-    current_step: i32,
-    voltage_mv: i32,
-    voltage_step: i32,
-    voltage_display: i32,
-}
-
-impl Default for FakeDataState {
-    fn default() -> Self {
-        Self {
-            ui: None,
-            frame_count: 0,
-            cpu_load: 6400,
-            cpu_target: 4200,
-            cpu_target_frames: 50,
-            cpu_display: 64,
-            random_state: 0x6d2b_79f5,
-            temperature_tenths: 426,
-            temperature_step: TEMPERATURE_STEP_TENTHS,
-            ram_load: 4800,
-            ram_step: -RAM_LOAD_STEP,
-            ram_display: 48,
-            current_ma: 186,
-            current_step: CURRENT_STEP_MA,
-            voltage_mv: 3290,
-            voltage_step: -VOLTAGE_STEP_MV,
-            voltage_display: 329,
-        }
-    }
-}
-
-impl FakeDataState {
-    fn attach_ui(&mut self, ui: slint::Weak<MainWindow>) {
-        self.ui = Some(ui);
-    }
-
-    fn next_random(&mut self) -> u32 {
-        let mut value = self.random_state;
-        value ^= value << 13;
-        value ^= value >> 17;
-        value ^= value << 5;
-        self.random_state = value;
-        value
-    }
-
-    fn select_cpu_target(&mut self) {
-        let roll = self.next_random() % 100;
-        let (min, max, hold_min, hold_span) = if roll < 55 {
-            (1500, 4200, 45, 100)
-        } else if roll < 88 {
-            (4200, 7200, 35, 80)
-        } else {
-            (7200, CPU_LOAD_MAX, 18, 42)
-        };
-        let range = (max - min + 1) as u32;
-        self.cpu_target = min + (self.next_random() % range) as i32;
-        self.cpu_target_frames = hold_min + self.next_random() % hold_span;
-    }
-
-    fn update_cpu_load(&mut self) {
-        let difference = self.cpu_target - self.cpu_load;
-        if self.cpu_target_frames == 0 || difference.abs() < 20 {
-            self.select_cpu_target();
-        } else {
-            self.cpu_target_frames -= 1;
-        }
-
-        let difference = self.cpu_target - self.cpu_load;
-        let distance = difference.abs();
-        let max_step = if distance > 2500 {
-            55
-        } else if distance > 1200 {
-            35
-        } else if distance > 400 {
-            22
-        } else {
-            12
-        };
-        let step = difference.clamp(-max_step, max_step);
-        let jitter = (self.next_random() % 9) as i32 - 4;
-        self.cpu_load = (self.cpu_load + step + jitter).clamp(CPU_LOAD_MIN, CPU_LOAD_MAX);
-    }
-
-    fn update(&mut self) {
-        self.frame_count = self.frame_count.wrapping_add(1);
-        self.update_cpu_load();
-        advance_fake_value(
-            &mut self.ram_load,
-            &mut self.ram_step,
-            RAM_LOAD_MIN,
-            RAM_LOAD_MAX,
-        );
-
-        if self.frame_count % TEMPERATURE_FRAME_DIVIDER == 0 {
-            advance_fake_value(
-                &mut self.temperature_tenths,
-                &mut self.temperature_step,
-                TEMPERATURE_MIN_TENTHS,
-                TEMPERATURE_MAX_TENTHS,
-            );
-        }
-        if self.frame_count % CURRENT_FRAME_DIVIDER == 0 {
-            advance_fake_value(
-                &mut self.current_ma,
-                &mut self.current_step,
-                CURRENT_MIN_MA,
-                CURRENT_MAX_MA,
-            );
-        }
-        if self.frame_count % VOLTAGE_FRAME_DIVIDER == 0 {
-            advance_fake_value(
-                &mut self.voltage_mv,
-                &mut self.voltage_step,
-                VOLTAGE_MIN_MV,
-                VOLTAGE_MAX_MV,
-            );
-        }
-
-        let Some(ui) = self.ui.as_ref().and_then(|ui| ui.upgrade()) else {
-            return;
-        };
-
-        ui.set_cpu_level(self.cpu_load as f32 / 10_000.0);
-        ui.set_ram_level(self.ram_load as f32 / 10_000.0);
-        ui.set_mercury_phase(orbit_phase(self.frame_count, MERCURY_ORBIT_FRAMES));
-        ui.set_venus_phase(orbit_phase(self.frame_count, VENUS_ORBIT_FRAMES));
-        ui.set_earth_phase(orbit_phase(self.frame_count, EARTH_ORBIT_FRAMES));
-        ui.set_mars_phase(orbit_phase(self.frame_count, MARS_ORBIT_FRAMES));
-        ui.set_jupiter_phase(orbit_phase(self.frame_count, JUPITER_ORBIT_FRAMES));
-        ui.set_saturn_phase(orbit_phase(self.frame_count, SATURN_ORBIT_FRAMES));
-        ui.set_uranus_phase(orbit_phase(self.frame_count, URANUS_ORBIT_FRAMES));
-        ui.set_neptune_phase(orbit_phase(self.frame_count, NEPTUNE_ORBIT_FRAMES));
-        ui.set_pluto_phase(orbit_phase(self.frame_count, PLUTO_ORBIT_FRAMES));
-
-        let cpu_display = self.cpu_load / 100;
-        if cpu_display != self.cpu_display {
-            self.cpu_display = cpu_display;
-            ui.set_cpu_value(format!("{cpu_display}%").into());
-        }
-
-        let ram_display = self.ram_load / 100;
-        if ram_display != self.ram_display {
-            self.ram_display = ram_display;
-            let ram_used_kb = ram_display * RAM_CAPACITY_KB / 100;
-            ui.set_ram_value(format!("{ram_display}%").into());
-            ui.set_ram_detail(format!("{ram_used_kb} / {RAM_CAPACITY_KB} KB").into());
-        }
-
-        if self.frame_count % TEMPERATURE_FRAME_DIVIDER == 0 {
-            let temperature_whole = self.temperature_tenths / 10;
-            let temperature_fraction = self.temperature_tenths % 10;
-            let temperature_range = TEMPERATURE_MAX_TENTHS - TEMPERATURE_MIN_TENTHS;
-            let temperature_level = 0.18
-                + 0.70 * (self.temperature_tenths - TEMPERATURE_MIN_TENTHS) as f32
-                    / temperature_range as f32;
-            ui.set_temperature_level(temperature_level);
-            ui.set_temperature_value(format!("{temperature_whole}.{temperature_fraction}").into());
-        }
-
-        if self.frame_count % CURRENT_FRAME_DIVIDER == 0 {
-            ui.set_current_value(self.current_ma.to_string().into());
-        }
-
-        let voltage_display = self.voltage_mv / 10;
-        if voltage_display != self.voltage_display {
-            self.voltage_display = voltage_display;
-            let voltage_volts = self.voltage_mv / 1000;
-            let voltage_hundredths = self.voltage_mv % 1000 / 10;
-            ui.set_voltage_value(format!("{voltage_volts}.{voltage_hundredths:02}").into());
-        }
-    }
-}
-
 fn uptime_millis() -> u128 {
     let mut ts = libc::timespec {
         tv_sec: 0,
@@ -704,14 +484,12 @@ fn uptime_millis() -> u128 {
 
 struct BluekernelBackend {
     window: RefCell<Option<Rc<slint::platform::software_renderer::MinimalSoftwareWindow>>>,
-    fake_data: Rc<RefCell<FakeDataState>>,
 }
 
 impl BluekernelBackend {
-    fn new(fake_data: Rc<RefCell<FakeDataState>>) -> Self {
+    fn new() -> Self {
         Self {
             window: RefCell::new(None),
-            fake_data,
         }
     }
 }
@@ -738,28 +516,16 @@ impl slint::platform::Platform for BluekernelBackend {
         let mut touch = match TouchFile::open() {
             Ok(touch) => Some(touch),
             Err(error) => {
-                println!("Failed to open /dev/ft6336u0: {error}");
+                println!("Failed to open /dev/cst9220: {error}");
                 None
             }
         };
         let mut touch_error_reported = false;
 
         loop {
-            self.fake_data.borrow_mut().update();
             slint::platform::update_timers_and_animations();
 
             if let Some(window) = self.window.borrow().clone() {
-                if let Some(touch) = touch.as_mut() {
-                    match touch.dispatch(&window) {
-                        Ok(()) => touch_error_reported = false,
-                        Err(error) if !touch_error_reported => {
-                            println!("Failed to read FT6336U touch data: {error}");
-                            touch_error_reported = true;
-                        }
-                        Err(_) => {}
-                    }
-                }
-                window.request_redraw();
                 let mut draw_result = Ok(());
                 window.draw_if_needed(|renderer| {
                     // Render line-by-line to avoid a full-frame RGB565 allocation. This saves
@@ -767,6 +533,19 @@ impl slint::platform::Platform for BluekernelBackend {
                     renderer.render_by_line(FbLineBuffer::new(&mut fb, &mut draw_result));
                 });
                 draw_result.map_err(|err| slint::PlatformError::Other(err.to_string()))?;
+
+                // Poll after drawing so a stalled I2C bus cannot prevent the
+                // initial UI frame from reaching the panel.
+                if let Some(touch) = touch.as_mut() {
+                    match touch.dispatch(&window) {
+                        Ok(()) => touch_error_reported = false,
+                        Err(error) if !touch_error_reported => {
+                            println!("Failed to read CST9220 touch data: {error}");
+                            touch_error_reported = true;
+                        }
+                        Err(_) => {}
+                    }
+                }
 
                 let _ = librs::time::msleep(FRAME_DELAY_MS);
             } else {
@@ -779,12 +558,11 @@ impl slint::platform::Platform for BluekernelBackend {
 fn run_slint_ui() -> IoResult<()> {
     println!("Starting slint ui example");
 
-    let fake_data = Rc::new(RefCell::new(FakeDataState::default()));
-    slint::platform::set_platform(Box::new(BluekernelBackend::new(fake_data.clone())))
+    slint::platform::set_platform(Box::new(BluekernelBackend::new()))
         .map_err(|err| Error::new(ErrorKind::Other, err.to_string()))?;
     let ui = MainWindow::new().map_err(|err| Error::new(ErrorKind::Other, err.to_string()))?;
-    ui.on_touch_button_clicked(|| println!("Slint touch button clicked"));
-    fake_data.borrow_mut().attach_ui(ui.as_weak());
+    ui.show()
+        .map_err(|err| Error::new(ErrorKind::Other, err.to_string()))?;
 
     slint::run_event_loop().map_err(|err| Error::new(ErrorKind::Other, err.to_string()))
 }

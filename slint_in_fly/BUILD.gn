@@ -59,6 +59,15 @@ reload_autoconf_and_build("slint_in_fly") {
     "-Clink-arg=-Wl,--strip-all",
     "-Clink-arg=-nostartfiles",
   ]
-  linker_script = rebase_path("//apps/example/slint_in_fly/xip_link.x")
+  # The ESP32-C3 and C6 XIP layouts use different SRAM mappings.
+  if (board == "seeed_xiao_esp32c3") {
+    linker_script = rebase_path("//apps/example/slint_in_fly/xip_link.x")
+  } else if (board == "esp32c6_devkitc_1") {
+    linker_script =
+        rebase_path("//apps/example/slint_in_fly/xip_link.esp32c6.x")
+  } else if (defined(default_linker_script)) {
+    # Keep the target usable on boards without an XIP-specific script.
+    linker_script = default_linker_script
+  }
   configs = [ "//build/boards/${board}:kernel_config" ]
 }

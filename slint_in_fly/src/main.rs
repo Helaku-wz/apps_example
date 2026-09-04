@@ -38,10 +38,9 @@ use std::io::{Error, ErrorKind, Result as IoResult};
 use std::rc::Rc;
 use std::thread;
 
-const LCD_H_RES: u16 = 320;
+const LCD_H_RES: u16 = 480;
 const LCD_V_RES: u16 = 480;
 const FRAME_DELAY_MS: libc::c_uint = 16;
-const UI_THREAD_STACK_SIZE: usize = 64 * 1024;
 
 const HEAP_SIZE: usize = 48 * 1024;
 

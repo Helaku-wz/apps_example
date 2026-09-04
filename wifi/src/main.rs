@@ -13,6 +13,9 @@
 // limitations under the License.
 
 extern crate esp_radio_sys;
+extern crate libm;
+mod math;
+
 use librs::syscall::Syscall;
 use std::io::{Read as _, Write as _};
 use std::net::{Ipv4Addr, SocketAddrV4, TcpStream};

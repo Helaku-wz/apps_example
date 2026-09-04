@@ -92,7 +92,7 @@ component PowerValue inherits Rectangle {
 }
 
 export component MainWindow inherits Window {
-    width: 320px;
+    width: 480px;
     height: 480px;
     background: #0b0f12;
     default-font-size: 10px;
@@ -352,6 +352,17 @@ export component MainWindow inherits Window {
             background: #283036;
         }
     }
+
+    // Centered 320-wide content band on the 480x480 CO5300 panel. The header
+    // and power rail span the full panel width; this transparent wrapper offsets
+    // the authored 320px dashboard so it sits centered, preserving the tuned
+    // orbit-sim coordinates (which Slint 1.17 line rendering renders as-is).
+    Rectangle {
+        x: 80px;
+        y: 0;
+        width: 320px;
+        height: parent.height;
+        background: transparent;
 
     // Primary MCU readings
     Rectangle {
@@ -733,6 +744,8 @@ export component MainWindow inherits Window {
         }
     }
 
+    } // end centered content band
+
     // Power rail summary
     Rectangle {
         x: 0;
@@ -750,7 +763,7 @@ export component MainWindow inherits Window {
         }
 
         PowerValue {
-            x: 12px;
+            x: 92px;
             y: 12px;
             width: 80px;
             height: 38px;
@@ -761,7 +774,7 @@ export component MainWindow inherits Window {
         }
 
         PowerValue {
-            x: 104px;
+            x: 184px;
             y: 12px;
             width: 90px;
             height: 38px;
@@ -772,7 +785,7 @@ export component MainWindow inherits Window {
         }
 
         Rectangle {
-            x: 204px;
+            x: 284px;
             y: 10px;
             width: 1px;
             height: 40px;
@@ -780,7 +793,7 @@ export component MainWindow inherits Window {
         }
 
         touch-test-button := Rectangle {
-            x: 216px;
+            x: 296px;
             y: 8px;
             width: 92px;
             height: 43px;
@@ -820,7 +833,7 @@ export component MainWindow inherits Window {
         background: #05080bcc;
 
         Rectangle {
-            x: 22px;
+            x: 102px;
             y: 72px;
             width: 276px;
             height: 336px;

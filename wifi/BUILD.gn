@@ -27,6 +27,7 @@ reload_autoconf_and_build("wifi_example") {
     "//external/vendor/embedded-io-0.6.1:embedded_io",
     "//external/vendor/embedded-tls-0.16.3:embedded_tls",
     "//external/vendor/fastrand-2.3.0:fastrand",
+    "//external/vendor/libm-0.2.16:libm",
     "//external/vendor/rand_core-0.6.4:rand_core",
     "//kernel/adapter/esp_radio_sys",
     "//kernel/kconfig:blueos_kconfig",
@@ -37,19 +38,32 @@ reload_autoconf_and_build("wifi_example") {
   linker_script = default_linker_script
   configs = [ "//build/boards/${board}:kernel_config" ]
 
+  # The Wi-Fi bindings and ROM symbols are chip-specific. Keep the C3 and C6
+  # archives separate: their exported symbols have the same names, but their
+  # implementations and ROM entry addresses are not interchangeable.
+  if (board == "esp32c6_devkitc_1") {
+    wifi_lib_dir = "//external/vendor/esp-wifi-sys-esp32c6-0.2.0/libs"
+    rom_lib_dir = "//external/vendor/esp-rom-sys-0.1.4/ld/esp32c6"
+    bluetooth_lib = "-lble_app"
+  } else {
+    wifi_lib_dir = "//external/vendor/esp-wifi-sys-esp32c3-0.2.0/libs"
+    rom_lib_dir = "//external/vendor/esp-rom-sys-0.1.4/ld/esp32c3"
+    bluetooth_lib = "-lbtdm_app"
+  }
+
   wifi_ldflags = [
     "-L" + rebase_path("${root_build_dir}/obj/external/vendor/esp-phy-0.2.0"),
     "-L" +
         rebase_path("${root_build_dir}/obj/external/vendor/esp-radio-0.18.0"),
-    "-L" + rebase_path("//external/vendor/esp-wifi-sys-esp32c3-0.2.0/libs"),
-    "-L" + rebase_path("//external/vendor/esp-rom-sys-0.1.4/ld/esp32c3"),
+    "-L" + rebase_path(wifi_lib_dir),
+    "-L" + rebase_path(rom_lib_dir),
     "-L" + rebase_path("//external/vendor/esp-radio-0.18.0"),
     "-L" + rebase_path("//external/vendor/esp-phy-0.2.0"),
     "-L" + rebase_path("//external/vendor/embedded-tls-0.16.3"),
     "-lesp-phy",
     "-lesp_rom_sys",
     "-lbtbb",
-    "-lbtdm_app",
+    bluetooth_lib,
     "-lcoexist",
     "-lespnow",
     "-lmesh",
@@ -62,6 +76,11 @@ reload_autoconf_and_build("wifi_example") {
     "-lphy",
     "-lpp",
   ]
+  if (board == "esp32c6_devkitc_1") {
+    # C6's libpp/libnet80211 archives use the vendor printf implementation.
+    # Keep it after the archives that reference it for static-link resolution.
+    wifi_ldflags += [ "-lprintf" ]
+  }
   rustflags = []
   foreach(item, wifi_ldflags) {
     rustflags += [ "-Clink-arg=${item}" ]
