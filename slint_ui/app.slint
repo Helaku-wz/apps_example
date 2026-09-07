@@ -96,6 +96,7 @@ export component MainWindow inherits Window {
     property <bool> box7-opened: false;
     property <bool> box8-opened: false;
     property <bool> box9-opened: false;
+    callback reset-requested(bool);
 
     Rectangle {
         x: 0;
@@ -444,6 +445,7 @@ export component MainWindow inherits Window {
             reset-area := TouchArea {
                 pointer-event(event) => {
                     if event.kind == PointerEventKind.down {
+                        root.reset-requested(root.opened-count > 0);
                         root.box1-opened = false;
                         root.box2-opened = false;
                         root.box3-opened = false;

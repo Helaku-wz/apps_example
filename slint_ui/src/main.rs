@@ -30,15 +30,16 @@ use slint::ComponentHandle;
 use std::cell::RefCell;
 use std::io::{Error, ErrorKind, Result as IoResult};
 use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
 const LCD_H_RES: u16 = 480;
 const LCD_V_RES: u16 = 480;
 const FRAME_DELAY_MS: libc::c_uint = 16;
 const UI_THREAD_STACK_SIZE: usize = 64 * 1024;
-// Merge several complete scanlines into one framebuffer write. Eight lines keep the
-// temporary buffer modest while substantially reducing framebuffer and QSPI setup overhead.
-const FRAMEBUFFER_BATCH_LINES: usize = 8;
+// A 16-row RGB565 block is 15,360 bytes. It divides a 480-row frame evenly, reduces a full
+// refresh to 30 writes, and preserves enough of the 64 KiB UI stack for Slint's renderer.
+const FRAMEBUFFER_BATCH_LINES: usize = 16;
 const TOUCH_REPORT_SIZE: usize = 12;
 const TOUCH_REPORT_VERSION: u8 = 1;
 const TOUCH_DEVICE_PATH: &[u8] = b"/dev/cst9220\0";
@@ -48,6 +49,11 @@ const TOUCH_CONTROLLER_NAME: &str = "CST9220";
 const TOUCH_FLIP_X: bool = false;
 const TOUCH_FLIP_Y: bool = false;
 const TOUCH_SWAP_XY: bool = false;
+
+// Resetting multiple opened boxes produces many disjoint dirty rectangles. Rendering that
+// particular update as one full frame is faster than issuing a separate panel transaction for
+// every rectangle; ordinary interactions retain Slint's smaller reused-buffer updates.
+static FORCE_FULL_REDRAW: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone, Copy)]
 enum PixelFormat {
@@ -581,9 +587,21 @@ impl slint::platform::Platform for BluekernelBackend {
             if let Some(window) = self.window.borrow().clone() {
                 let mut draw_result = Ok(());
                 window.draw_if_needed(|renderer| {
+                    let force_full_redraw = FORCE_FULL_REDRAW.swap(false, Ordering::AcqRel);
+                    let previous_repaint_type = renderer.repaint_buffer_type();
+                    if force_full_redraw {
+                        renderer.set_repaint_buffer_type(
+                            slint::platform::software_renderer::RepaintBufferType::NewBuffer,
+                        );
+                    }
+
                     // Render line-by-line to avoid a full-frame RGB565 allocation. This saves
                     // substantial SRAM, at the cost of not supporting Slint `Path` items.
                     renderer.render_by_line(FbLineBuffer::new(&mut fb, &mut draw_result));
+
+                    if force_full_redraw {
+                        renderer.set_repaint_buffer_type(previous_repaint_type);
+                    }
                 });
                 draw_result.map_err(|err| slint::PlatformError::Other(err.to_string()))?;
 
@@ -614,6 +632,11 @@ fn run_slint_ui() -> IoResult<()> {
     slint::platform::set_platform(Box::new(BluekernelBackend::new()))
         .map_err(|err| Error::new(ErrorKind::Other, err.to_string()))?;
     let ui = MainWindow::new().map_err(|err| Error::new(ErrorKind::Other, err.to_string()))?;
+    ui.on_reset_requested(|had_opened_boxes| {
+        if had_opened_boxes {
+            FORCE_FULL_REDRAW.store(true, Ordering::Release);
+        }
+    });
     ui.show()
         .map_err(|err| Error::new(ErrorKind::Other, err.to_string()))?;
 
