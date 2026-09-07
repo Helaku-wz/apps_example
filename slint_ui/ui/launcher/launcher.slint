@@ -1,0 +1,169 @@
+// Launcher page with two tabs: 内核 and 外设
+// Compatible with SoftwareRenderer::render_by_line: no Path items.
+
+import { DemoIcon } from "../components/demo-icon.slint";
+import { NavTab } from "../components/nav-tab.slint";
+
+export component Launcher inherits Rectangle {
+    callback open-app(int);
+    in-out property <int> current-tab: 0;
+    in-out property <float> tab-offset: 0.0;
+
+    background: #0b1115;
+
+    property <int> active-tab: root.tab-offset > 0.5 ? 1 : 0;
+
+    // Top bar
+    Rectangle {
+        x: 0; y: 0;
+        width: parent.width; height: 56px;
+        background: #111b20;
+
+        Text {
+            x: 24px; y: 0; width: 200px; height: parent.height;
+            text: "LAUNCHER";
+            color: #edf4f1; font-size: 22px; font-weight: 800;
+            vertical-alignment: center;
+        }
+    }
+
+    Rectangle {
+        x: 0; y: 55px; width: parent.width; height: 1px;
+        background: #2a3a40;
+    }
+
+    // Content area
+    Rectangle {
+        x: 0; y: 56px; width: parent.width; height: 375px;
+        clip: true;
+
+        // Swipe gesture for tab switching
+        touch-gesture := TouchArea {
+            x: 0; y: 0;
+            width: parent.width;
+            height: parent.height;
+            property <length> start-x: 0;
+            property <bool> tracking: false;
+
+            pointer-event(event) => {
+                if event.kind == PointerEventKind.down {
+                    self.start-x = self.mouse-x;
+                    self.tracking = true;
+                }
+                if event.kind == PointerEventKind.up && self.tracking {
+                    if self.mouse-x < self.start-x - 60px && root.current-tab < 1 {
+                        root.current-tab = 1;
+                        root.tab-offset = 1.0;
+                    }
+                    if self.mouse-x > self.start-x + 60px && root.current-tab > 0 {
+                        root.current-tab = 0;
+                        root.tab-offset = 0.0;
+                    }
+                    self.tracking = false;
+                }
+            }
+        }
+
+        // Tab pages switch immediately to avoid repeated full-area redraws.
+        Rectangle {
+            x: -1 * root.tab-offset * 480px;
+            y: 0;
+            width: 960px;
+            height: parent.height;
+
+            // 内核 tab page — 5 demos in 2x3 grid
+            Rectangle {
+                x: 0; y: 0; width: 480px; height: parent.height;
+
+                DemoIcon {
+                    x: 24px;  y: 44px;
+                    icon-text: "≣"; label: "调度与监控";
+                    accent: #5ca9ff;
+                    clicked => { root.open-app(6); }
+                }
+                DemoIcon {
+                    x: 168px; y: 44px;
+                    icon-text: "⏏"; label: "文件 IO";
+                    accent: #f0bd62;
+                    clicked => { root.open-app(8); }
+                }
+                DemoIcon {
+                    x: 312px; y: 44px;
+                    icon-text: "◐"; label: "屏幕变色";
+                    accent: #f08091;
+                    clicked => { root.open-app(9); }
+                }
+                DemoIcon {
+                    x: 24px;  y: 212px;
+                    icon-text: "☀"; label: "背光控制";
+                    accent: #f0bd62;
+                    clicked => { root.open-app(10); }
+                }
+                DemoIcon {
+                    x: 168px; y: 212px;
+                    icon-text: "▣"; label: "背景图";
+                    accent: #cf8ff2;
+                    clicked => { root.open-app(11); }
+                }
+            }
+
+            // 外设 tab page — 5 demos in 2x3 grid
+            Rectangle {
+                x: 480px; y: 0; width: 480px; height: parent.height;
+
+                DemoIcon {
+                    x: 24px;  y: 44px;
+                    icon-text: "≋"; label: "Wi-Fi 扫描";
+                    accent: #6fe0bd;
+                    clicked => { root.open-app(12); }
+                }
+                DemoIcon {
+                    x: 168px; y: 44px;
+                    icon-text: "◈"; label: "IMU Sensors";
+                    accent: #f08091;
+                    clicked => { root.open-app(13); }
+                }
+                DemoIcon {
+                    x: 312px; y: 44px;
+                    icon-text: "▤"; label: "SD 卡";
+                    accent: #f0bd62;
+                    clicked => { root.open-app(14); }
+                }
+                DemoIcon {
+                    x: 24px;  y: 212px;
+                    icon-text: "◎"; label: "HTTP GET";
+                    accent: #5ca9ff;
+                    clicked => { root.open-app(15); }
+                }
+                DemoIcon {
+                    x: 168px; y: 212px;
+                    icon-text: "♪"; label: "音频";
+                    accent: #cf8ff2;
+                    clicked => { root.open-app(16); }
+                }
+            }
+        }
+    }
+
+    // Bottom nav bar
+    Rectangle {
+        x: 0; y: 431px; width: parent.width; height: 49px;
+        background: #111b20;
+
+        Rectangle {
+            x: 0; y: 0; width: parent.width; height: 1px;
+            background: #2a3a40;
+        }
+
+        NavTab {
+            x: 0; y: 1px; label: "◉ 内核";
+            active: active-tab == 0; accent: #5ca9ff;
+            clicked => { root.current-tab = 0; root.tab-offset = 0.0; }
+        }
+        NavTab {
+            x: 240px; y: 1px; label: "◉ 外设";
+            active: active-tab == 1; accent: #6fe0bd;
+            clicked => { root.current-tab = 1; root.tab-offset = 1.0; }
+        }
+    }
+}

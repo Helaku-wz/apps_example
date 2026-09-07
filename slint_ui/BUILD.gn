@@ -21,14 +21,25 @@ _slint_ui_generated = "${target_gen_dir}/slint_ui_main_window.rs"
 
 action("generate_slint_ui") {
   script = "//build/scripts/run_slint_cli.py"
-  inputs = [ "app.slint" ]
+  slint_entry = "ui/main.slint"
+  inputs = [
+    slint_entry,
+    "ui/components/app-page.slint",
+    "ui/components/demo-icon.slint",
+    "ui/components/nav-tab.slint",
+    "ui/launcher/launcher.slint",
+    "ui/pages/demo-page.slint",
+    "ui/pages/sched-mon-page.slint",
+  ]
   outputs = [ _slint_ui_generated ]
   args = [
     "--embed-resources",
     "software-renderer",
+    "-I",
+    rebase_path("."),
     "--output",
     rebase_path(_slint_ui_generated),
-    rebase_path(inputs[0]),
+    rebase_path(slint_entry),
   ]
 }
 
