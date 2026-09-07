@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #![feature(cfg_boolean_literals)]
+extern crate esp_radio_sys;
 extern crate libm;
 extern crate librs;
 extern crate rsrt;
@@ -21,6 +22,7 @@ mod app_window {
     include!(env!("SLINT_UI_GENERATED"));
 }
 mod math;
+mod wifi;
 
 use crate::app_window::MainWindow;
 use librs::{c_str::CStr, syscall::Syscall};
@@ -632,6 +634,7 @@ fn run_slint_ui() -> IoResult<()> {
     slint::platform::set_platform(Box::new(BluekernelBackend::new()))
         .map_err(|err| Error::new(ErrorKind::Other, err.to_string()))?;
     let ui = MainWindow::new().map_err(|err| Error::new(ErrorKind::Other, err.to_string()))?;
+    let _wifi_scan_timer = wifi::install(&ui);
     ui.on_reset_requested(|had_opened_boxes| {
         if had_opened_boxes {
             FORCE_FULL_REDRAW.store(true, Ordering::Release);

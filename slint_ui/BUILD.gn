@@ -30,6 +30,7 @@ action("generate_slint_ui") {
     "ui/launcher/launcher.slint",
     "ui/pages/demo-page.slint",
     "ui/pages/sched-mon-page.slint",
+    "ui/pages/wifi-scan-page.slint",
   ]
   outputs = [ _slint_ui_generated ]
   args = [
@@ -55,10 +56,55 @@ reload_autoconf_and_build("slint_ui_example") {
     ":generate_slint_ui",
     "//external/vendor/libm-0.2.16:libm",
     "//external/vendor/slint-1.17.1:slint",
+    "//kernel/adapter/esp_radio_sys",
     "//kernel/rsrt:rsrt_std",
     "//libc",
     "//librs",
   ]
   linker_script = default_linker_script
   configs = [ "//build/boards/${board}:kernel_config" ]
+
+  if (board == "esp32c6_devkitc_1") {
+    wifi_lib_dir = "//external/vendor/esp-wifi-sys-esp32c6-0.2.0/libs"
+    rom_lib_dir = "//external/vendor/esp-rom-sys-0.1.4/ld/esp32c6"
+    bluetooth_lib = "-lble_app"
+  } else {
+    wifi_lib_dir = "//external/vendor/esp-wifi-sys-esp32c3-0.2.0/libs"
+    rom_lib_dir = "//external/vendor/esp-rom-sys-0.1.4/ld/esp32c3"
+    bluetooth_lib = "-lbtdm_app"
+  }
+
+  wifi_ldflags = [
+    "-L" + rebase_path("${root_build_dir}/obj/external/vendor/esp-phy-0.2.0"),
+    "-L" + rebase_path("${root_build_dir}/obj/external/vendor/esp-radio-0.18.0"),
+    "-L" + rebase_path(wifi_lib_dir),
+    "-L" + rebase_path(rom_lib_dir),
+    "-L" + rebase_path("//external/vendor/esp-radio-0.18.0"),
+    "-L" + rebase_path("//external/vendor/esp-phy-0.2.0"),
+    "-lesp-phy",
+    "-lesp_rom_sys",
+    "-lbtbb",
+    bluetooth_lib,
+    "-lcoexist",
+    "-lespnow",
+    "-lmesh",
+    "-lnet80211",
+    "-lcore",
+    "-lsmartconfig",
+    "-lwapi",
+    "-lwpa_supplicant",
+    "-lregulatory",
+    "-lphy",
+    "-lpp",
+    # ESP Wi-Fi's libpp calls the C math function floor(). Keep libm after
+    # the vendor archives so the static linker can resolve that reference.
+    "-lm",
+  ]
+  if (board == "esp32c6_devkitc_1") {
+    wifi_ldflags += [ "-lprintf" ]
+  }
+  rustflags = []
+  foreach(item, wifi_ldflags) {
+    rustflags += [ "-Clink-arg=${item}" ]
+  }
 }

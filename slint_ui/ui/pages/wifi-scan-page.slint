@@ -1,4 +1,4 @@
-// Wi-Fi scan UI for the 480x480 CO5300 AMOLED panel.
+// Wi-Fi scan UI integrated into the launcher.
 // Keep this compatible with SoftwareRenderer::render_by_line: no Path items.
 
 export struct WifiNetwork {
@@ -9,17 +9,17 @@ export struct WifiNetwork {
     secure: bool,
 }
 
-export component MainWindow inherits Window {
+export component WifiScanPage inherits Rectangle {
     width: 480px;
     height: 480px;
     background: #091217;
-    default-font-size: 11px;
 
     in property <[WifiNetwork]> networks;
     in-out property <bool> scanning: false;
     in-out property <int> result-count: 0;
     in-out property <string> status-text: "Preparing wireless scanner";
     callback scan-requested();
+    callback go-back();
 
     Rectangle {
         x: 0;
@@ -29,7 +29,32 @@ export component MainWindow inherits Window {
         background: #101f27;
 
         Rectangle {
-            x: 20px;
+            x: 0;
+            y: 0;
+            width: 48px;
+            height: parent.height;
+            background: back-area.pressed ? #19323b : transparent;
+
+            Text {
+                width: parent.width;
+                height: parent.height;
+                text: "←";
+                color: #4bd6a2;
+                font-size: 24px;
+                font-weight: 700;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+
+            back-area := TouchArea {
+                width: parent.width;
+                height: parent.height;
+                clicked => { root.go-back(); }
+            }
+        }
+
+        Rectangle {
+            x: 52px;
             y: 18px;
             width: 5px;
             height: 46px;
@@ -38,7 +63,7 @@ export component MainWindow inherits Window {
         }
 
         Text {
-            x: 38px;
+            x: 70px;
             y: 12px;
             width: 260px;
             height: 31px;
@@ -50,7 +75,7 @@ export component MainWindow inherits Window {
         }
 
         Text {
-            x: 39px;
+            x: 71px;
             y: 45px;
             width: 260px;
             height: 18px;
