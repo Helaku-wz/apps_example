@@ -1,0 +1,326 @@
+// Wi-Fi scan UI for the 480x480 CO5300 AMOLED panel.
+// Keep this compatible with SoftwareRenderer::render_by_line: no Path items.
+
+export struct WifiNetwork {
+    ssid: string,
+    detail: string,
+    signal-text: string,
+    strength: int,
+    secure: bool,
+}
+
+export component MainWindow inherits Window {
+    width: 480px;
+    height: 480px;
+    background: #091217;
+    default-font-size: 11px;
+
+    in property <[WifiNetwork]> networks;
+    in-out property <bool> scanning: false;
+    in-out property <int> result-count: 0;
+    in-out property <string> status-text: "Preparing wireless scanner";
+    callback scan-requested();
+
+    Rectangle {
+        x: 0;
+        y: 0;
+        width: parent.width;
+        height: 82px;
+        background: #101f27;
+
+        Rectangle {
+            x: 20px;
+            y: 18px;
+            width: 5px;
+            height: 46px;
+            background: #4bd6a2;
+            border-radius: 2px;
+        }
+
+        Text {
+            x: 38px;
+            y: 12px;
+            width: 260px;
+            height: 31px;
+            text: "WIRELESS SCAN";
+            color: #f1f8f6;
+            font-size: 22px;
+            font-weight: 800;
+            vertical-alignment: center;
+        }
+
+        Text {
+            x: 39px;
+            y: 45px;
+            width: 260px;
+            height: 18px;
+            text: "ESP32-C6  /  2.4 GHZ NETWORKS";
+            color: #78929b;
+            font-size: 9px;
+            font-weight: 700;
+            vertical-alignment: center;
+        }
+
+        Rectangle {
+            x: 348px;
+            y: 18px;
+            width: 112px;
+            height: 46px;
+            background: root.scanning ? #1b353d : scan-area.pressed ? #2a5c50 : #1f4f45;
+            border-width: 1px;
+            border-color: root.scanning ? #31505a : #3a806d;
+            border-radius: 9px;
+
+            Text {
+                width: parent.width;
+                height: parent.height;
+                text: root.scanning ? "SCANNING..." : "SCAN AGAIN";
+                color: root.scanning ? #779097 : #d9fff2;
+                font-size: 10px;
+                font-weight: 800;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+
+            scan-area := TouchArea {
+                pointer-event(event) => {
+                    if event.kind == PointerEventKind.down && !root.scanning {
+                        root.scan-requested();
+                    }
+                }
+            }
+        }
+    }
+
+    Rectangle {
+        x: 16px;
+        y: 94px;
+        width: 448px;
+        height: 50px;
+        background: #102027;
+        border-width: 1px;
+        border-color: #203740;
+        border-radius: 9px;
+
+        Rectangle {
+            x: 13px;
+            y: 12px;
+            width: 26px;
+            height: 26px;
+            background: root.scanning ? #433c22 : root.result-count > 0 ? #173c32 : #25353b;
+            border-radius: 13px;
+
+            Text {
+                width: parent.width;
+                height: parent.height;
+                text: root.scanning ? "..." : root.result-count;
+                color: root.scanning ? #f0c95f : root.result-count > 0 ? #65e0b3 : #82969c;
+                font-size: 10px;
+                font-weight: 800;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        Text {
+            x: 51px;
+            y: 7px;
+            width: 376px;
+            height: 20px;
+            text: root.scanning ? "Looking for nearby access points" : root.result-count > 0 ? "Nearby access points" : "No scan results yet";
+            color: #e6f0ed;
+            font-size: 11px;
+            font-weight: 700;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+
+        Text {
+            x: 51px;
+            y: 26px;
+            width: 376px;
+            height: 17px;
+            text: root.status-text;
+            color: root.scanning ? #d5b95e : #758c93;
+            font-size: 8px;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+    }
+
+    if root.result-count == 0: Rectangle {
+        x: 16px;
+        y: 156px;
+        width: 448px;
+        height: 250px;
+        background: #0d1a20;
+        border-width: 1px;
+        border-color: #1d3038;
+        border-radius: 11px;
+
+        Text {
+            x: 0;
+            y: 70px;
+            width: parent.width;
+            height: 50px;
+            text: root.scanning ? "..." : "WI-FI";
+            color: root.scanning ? #d5b95e : #3f5c65;
+            font-size: root.scanning ? 30px : 25px;
+            font-weight: 800;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+
+        Text {
+            x: 30px;
+            y: 127px;
+            width: 388px;
+            height: 24px;
+            text: root.scanning ? "Scanning channels 1 through 13" : "Tap SCAN AGAIN to search for networks";
+            color: #849aa1;
+            font-size: 10px;
+            font-weight: 600;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+
+        Text {
+            x: 30px;
+            y: 156px;
+            width: 388px;
+            height: 20px;
+            text: "SSID, signal, channel and security will appear here";
+            color: #4e6871;
+            font-size: 8px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    for network[index] in root.networks: Rectangle {
+        x: 16px;
+        y: 154px + index * 45px;
+        width: 448px;
+        height: 39px;
+        background: #102027;
+        border-width: 1px;
+        border-color: #1e333b;
+        border-radius: 7px;
+
+        Rectangle {
+            x: 10px;
+            y: 8px;
+            width: 23px;
+            height: 23px;
+            background: #17343a;
+            border-radius: 12px;
+
+            Text {
+                width: parent.width;
+                height: parent.height;
+                text: index + 1;
+                color: #62d4ad;
+                font-size: 8px;
+                font-weight: 800;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        Text {
+            x: 43px;
+            y: 3px;
+            width: 238px;
+            height: 19px;
+            text: network.ssid;
+            color: #edf6f3;
+            font-size: 11px;
+            font-weight: 700;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+
+        Text {
+            x: 43px;
+            y: 20px;
+            width: 238px;
+            height: 15px;
+            text: network.detail;
+            color: network.secure ? #70878e : #c5a956;
+            font-size: 8px;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+
+        Rectangle {
+            x: 302px;
+            y: 24px;
+            width: 4px;
+            height: 5px;
+            background: network.strength >= 1 ? #53d4a6 : #2b3c42;
+        }
+        Rectangle {
+            x: 309px;
+            y: 19px;
+            width: 4px;
+            height: 10px;
+            background: network.strength >= 2 ? #53d4a6 : #2b3c42;
+        }
+        Rectangle {
+            x: 316px;
+            y: 14px;
+            width: 4px;
+            height: 15px;
+            background: network.strength >= 3 ? #53d4a6 : #2b3c42;
+        }
+        Rectangle {
+            x: 323px;
+            y: 9px;
+            width: 4px;
+            height: 20px;
+            background: network.strength >= 4 ? #53d4a6 : #2b3c42;
+        }
+
+        Text {
+            x: 338px;
+            y: 0;
+            width: 98px;
+            height: parent.height;
+            text: network.signal-text;
+            color: network.strength >= 3 ? #6fe0b8 : network.strength == 2 ? #d5b95e : #d07d72;
+            font-size: 9px;
+            font-weight: 700;
+            horizontal-alignment: right;
+            vertical-alignment: center;
+        }
+    }
+
+    Rectangle {
+        x: 0;
+        y: 436px;
+        width: parent.width;
+        height: 44px;
+        background: #101f27;
+
+        Rectangle {
+            x: 20px;
+            y: 14px;
+            width: 5px;
+            height: 16px;
+            background: root.scanning ? #d5b95e : #4bd6a2;
+            border-radius: 2px;
+        }
+
+        Text {
+            x: 36px;
+            y: 7px;
+            width: 424px;
+            height: 30px;
+            text: root.result-count > 6 ? "Showing 6 strongest  /  Auto refresh: 15 seconds" : "Signal order  /  Auto refresh: 15 seconds";
+            color: #718990;
+            font-size: 8px;
+            font-weight: 600;
+            vertical-alignment: center;
+        }
+    }
+}
