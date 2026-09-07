@@ -7,14 +7,15 @@ component BlindBox inherits Rectangle {
     in property <string> mark;
     in property <color> accent;
     in property <bool> opened: false;
+    in property <bool> dark-mode: true;
     callback reveal();
 
     width: 136px;
     height: 104px;
     border-width: root.opened ? 2px : 1px;
-    border-color: root.opened ? root.accent : #36464d;
+    border-color: root.opened ? root.accent : root.dark-mode ? #36464d : #bdcac8;
     border-radius: 11px;
-    background: root.opened ? #17252a : touch-area.pressed ? #21343b : #121b20;
+    background: root.opened ? root.dark-mode ? #17252a : #e7f1ee : touch-area.pressed ? root.dark-mode ? #21343b : #dce8e5 : root.dark-mode ? #121b20 : #ffffff;
 
     // A small accent strip makes each unopened box distinguishable while the
     // large question mark keeps the interaction obvious on a small panel.
@@ -33,7 +34,7 @@ component BlindBox inherits Rectangle {
         width: 100px;
         height: 34px;
         text: root.opened ? root.mark : "?";
-        color: root.opened ? root.accent : #dbe7e7;
+        color: root.opened ? root.accent : root.dark-mode ? #dbe7e7 : #344348;
         font-size: root.opened ? 19px : 28px;
         font-weight: 800;
         horizontal-alignment: center;
@@ -46,7 +47,7 @@ component BlindBox inherits Rectangle {
         width: 108px;
         height: 17px;
         text: root.opened ? root.title : "MYSTERY BOX";
-        color: root.opened ? #f0f5f3 : #b9c7c8;
+        color: root.opened ? root.dark-mode ? #f0f5f3 : #192529 : root.dark-mode ? #b9c7c8 : #35464a;
         font-size: 10px;
         font-weight: 700;
         horizontal-alignment: center;
@@ -60,7 +61,7 @@ component BlindBox inherits Rectangle {
         width: 112px;
         height: 18px;
         text: root.opened ? root.description : "TAP TO OPEN";
-        color: root.opened ? #93a6a8 : #6c7e82;
+        color: root.opened ? root.dark-mode ? #93a6a8 : #5d7073 : root.dark-mode ? #6c7e82 : #74868a;
         font-size: 8px;
         font-weight: 600;
         horizontal-alignment: center;
@@ -80,9 +81,10 @@ component BlindBox inherits Rectangle {
 export component MainWindow inherits Window {
     width: 480px;
     height: 480px;
-    background: #0b1115;
+    background: root.dark-mode ? #0b1115 : #edf3f1;
     default-font-size: 11px;
 
+    property <bool> dark-mode: true;
     property <int> opened-count: 0;
     property <string> last-reward: "Choose a box to begin";
     property <bool> box1-opened: false;
@@ -100,7 +102,7 @@ export component MainWindow inherits Window {
         y: 0;
         width: parent.width;
         height: 76px;
-        background: #111b20;
+        background: root.dark-mode ? #111b20 : #ffffff;
 
         Text {
             x: 22px;
@@ -108,7 +110,7 @@ export component MainWindow inherits Window {
             width: 250px;
             height: 25px;
             text: "LUCKY GRID";
-            color: #edf4f1;
+            color: root.dark-mode ? #edf4f1 : #172328;
             font-size: 22px;
             font-weight: 800;
             vertical-alignment: center;
@@ -117,13 +119,58 @@ export component MainWindow inherits Window {
         Text {
             x: 24px;
             y: 42px;
-            width: 270px;
+            width: 244px;
             height: 17px;
             text: "OPEN 9 BOXES / FIND 9 SURPRISES";
-            color: #728489;
+            color: root.dark-mode ? #728489 : #65777b;
             font-size: 9px;
             font-weight: 700;
             vertical-alignment: center;
+        }
+
+        Rectangle {
+            x: 280px;
+            y: 14px;
+            width: 80px;
+            height: 46px;
+            background: theme-area.pressed ? root.dark-mode ? #31464d : #cadbd7 : root.dark-mode ? #1d3037 : #e1ebe8;
+            border-width: 1px;
+            border-color: root.dark-mode ? #39505a : #bdcfca;
+            border-radius: 8px;
+
+            Text {
+                x: 0px;
+                y: 4px;
+                width: parent.width;
+                height: 15px;
+                text: "THEME";
+                color: root.dark-mode ? #7e999c : #6b7f7e;
+                font-size: 8px;
+                font-weight: 700;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+
+            Text {
+                x: 0px;
+                y: 18px;
+                width: parent.width;
+                height: 23px;
+                text: root.dark-mode ? "DARK" : "LIGHT";
+                color: root.dark-mode ? #74daba : #28765f;
+                font-size: 11px;
+                font-weight: 800;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+
+            theme-area := TouchArea {
+                pointer-event(event) => {
+                    if event.kind == PointerEventKind.down {
+                        root.dark-mode = !root.dark-mode;
+                    }
+                }
+            }
         }
 
         Rectangle {
@@ -131,7 +178,7 @@ export component MainWindow inherits Window {
             y: 14px;
             width: 82px;
             height: 46px;
-            background: #1d3037;
+            background: root.dark-mode ? #1d3037 : #e1ebe8;
             border-radius: 8px;
 
             Text {
@@ -140,7 +187,7 @@ export component MainWindow inherits Window {
                 width: parent.width;
                 height: 15px;
                 text: "OPENED";
-                color: #7e999c;
+                color: root.dark-mode ? #7e999c : #6b7f7e;
                 font-size: 8px;
                 font-weight: 700;
                 horizontal-alignment: center;
@@ -153,7 +200,7 @@ export component MainWindow inherits Window {
                 width: parent.width;
                 height: 23px;
                 text: root.opened-count + "/9";
-                color: #6fe0bd;
+                color: root.dark-mode ? #6fe0bd : #28765f;
                 font-size: 17px;
                 font-weight: 800;
                 horizontal-alignment: center;
@@ -167,7 +214,7 @@ export component MainWindow inherits Window {
         y: 75px;
         width: parent.width;
         height: 1px;
-        background: #2a3a40;
+        background: root.dark-mode ? #2a3a40 : #d3dfdc;
     }
 
     BlindBox {
@@ -178,6 +225,7 @@ export component MainWindow inherits Window {
         mark: "STAR";
         accent: #f0bd62;
         opened: root.box1-opened;
+        dark-mode: root.dark-mode;
         reveal => {
             if !root.box1-opened {
                 root.box1-opened = true;
@@ -195,6 +243,7 @@ export component MainWindow inherits Window {
         mark: "PIXEL";
         accent: #6fb6f2;
         opened: root.box2-opened;
+        dark-mode: root.dark-mode;
         reveal => {
             if !root.box2-opened {
                 root.box2-opened = true;
@@ -212,6 +261,7 @@ export component MainWindow inherits Window {
         mark: "COFFEE";
         accent: #da966c;
         opened: root.box3-opened;
+        dark-mode: root.dark-mode;
         reveal => {
             if !root.box3-opened {
                 root.box3-opened = true;
@@ -229,6 +279,7 @@ export component MainWindow inherits Window {
         mark: "BOLT";
         accent: #e8df70;
         opened: root.box4-opened;
+        dark-mode: root.dark-mode;
         reveal => {
             if !root.box4-opened {
                 root.box4-opened = true;
@@ -246,6 +297,7 @@ export component MainWindow inherits Window {
         mark: "GEM";
         accent: #cf8ff2;
         opened: root.box5-opened;
+        dark-mode: root.dark-mode;
         reveal => {
             if !root.box5-opened {
                 root.box5-opened = true;
@@ -263,6 +315,7 @@ export component MainWindow inherits Window {
         mark: "MOON";
         accent: #9ea8f4;
         opened: root.box6-opened;
+        dark-mode: root.dark-mode;
         reveal => {
             if !root.box6-opened {
                 root.box6-opened = true;
@@ -280,6 +333,7 @@ export component MainWindow inherits Window {
         mark: "WAVE";
         accent: #64d1d8;
         opened: root.box7-opened;
+        dark-mode: root.dark-mode;
         reveal => {
             if !root.box7-opened {
                 root.box7-opened = true;
@@ -297,6 +351,7 @@ export component MainWindow inherits Window {
         mark: "HEART";
         accent: #f08091;
         opened: root.box8-opened;
+        dark-mode: root.dark-mode;
         reveal => {
             if !root.box8-opened {
                 root.box8-opened = true;
@@ -314,6 +369,7 @@ export component MainWindow inherits Window {
         mark: "BONUS";
         accent: #71e0a9;
         opened: root.box9-opened;
+        dark-mode: root.dark-mode;
         reveal => {
             if !root.box9-opened {
                 root.box9-opened = true;
@@ -328,7 +384,7 @@ export component MainWindow inherits Window {
         y: 424px;
         width: parent.width;
         height: 56px;
-        background: #111b20;
+        background: root.dark-mode ? #111b20 : #ffffff;
 
         Rectangle {
             x: 24px;
@@ -345,7 +401,7 @@ export component MainWindow inherits Window {
             width: 320px;
             height: 18px;
             text: root.opened-count == 9 ? "ALL REVEALED - JACKPOT!" : root.last-reward;
-            color: #edf4f1;
+            color: root.dark-mode ? #edf4f1 : #172328;
             font-size: 10px;
             font-weight: 700;
             vertical-alignment: center;
@@ -358,7 +414,7 @@ export component MainWindow inherits Window {
             width: 320px;
             height: 15px;
             text: root.opened-count == 0 ? "Tap any box to reveal its reward" : "Tap unopened boxes to keep exploring";
-            color: #778a8d;
+            color: root.dark-mode ? #778a8d : #65777b;
             font-size: 8px;
             vertical-alignment: center;
             overflow: elide;
@@ -369,14 +425,16 @@ export component MainWindow inherits Window {
             y: 12px;
             width: 62px;
             height: 32px;
-            background: reset-area.pressed ? #31464d : #203239;
+            background: reset-area.pressed ? root.dark-mode ? #31464d : #cadbd7 : root.dark-mode ? #203239 : #e1ebe8;
+            border-width: 1px;
+            border-color: root.dark-mode ? #39505a : #bdcfca;
             border-radius: 7px;
 
             Text {
                 width: parent.width;
                 height: parent.height;
                 text: "RESET";
-                color: #9db1b2;
+                color: root.dark-mode ? #9db1b2 : #49605f;
                 font-size: 8px;
                 font-weight: 800;
                 horizontal-alignment: center;

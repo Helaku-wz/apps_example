@@ -36,6 +36,9 @@ const LCD_H_RES: u16 = 480;
 const LCD_V_RES: u16 = 480;
 const FRAME_DELAY_MS: libc::c_uint = 16;
 const UI_THREAD_STACK_SIZE: usize = 64 * 1024;
+// Merge several complete scanlines into one framebuffer write. Eight lines keep the
+// temporary buffer modest while substantially reducing framebuffer and QSPI setup overhead.
+const FRAMEBUFFER_BATCH_LINES: usize = 8;
 const TOUCH_REPORT_SIZE: usize = 12;
 const TOUCH_REPORT_VERSION: u8 = 1;
 const TOUCH_DEVICE_PATH: &[u8] = b"/dev/cst9220\0";
@@ -316,15 +319,35 @@ impl FbFile {
             PixelFormat::Bgra8888 => write_bgra8888_line(self.fd, pixels),
         }
     }
+
+    fn draw_rgb565_rows(&mut self, first_line: usize, bytes: &[u8]) -> IoResult<()> {
+        debug_assert!(matches!(self.pixel_format, PixelFormat::Rgb565));
+        let dst_offset = first_line as u64 * self.fixed_info.line_length as u64;
+        if dst_offset > libc::off_t::MAX as u64 {
+            return Err(Error::from_raw_os_error(libc::EINVAL));
+        }
+
+        let offset =
+            librs::syscall::sys::Sys::lseek(self.fd, dst_offset as libc::off_t, libc::SEEK_SET);
+        if offset < 0 {
+            return Err(syscall_error(offset as libc::c_int));
+        }
+
+        write_all(self.fd, bytes)
+    }
 }
 
-/// Renders into one reusable scanline instead of allocating a full-frame pixel buffer.
+/// Renders into one reusable scanline and batches complete RGB565 rows instead of allocating
+/// a full-frame pixel buffer.
 ///
 /// This keeps the software renderer's SRAM usage low. Slint 1.17 does not support `Path`
 /// items in `render_by_line`, so this backend intentionally does not accept `Path` items.
 struct FbLineBuffer<'a> {
     fb: &'a mut FbFile,
     pixels: [Rgb565Pixel; LCD_H_RES as usize],
+    rgb565_batch: [u8; LCD_H_RES as usize * 2 * FRAMEBUFFER_BATCH_LINES],
+    batch_first_line: usize,
+    batch_line_count: usize,
     result: &'a mut IoResult<()>,
 }
 
@@ -333,8 +356,25 @@ impl<'a> FbLineBuffer<'a> {
         Self {
             fb,
             pixels: [Rgb565Pixel(0); LCD_H_RES as usize],
+            rgb565_batch: [0; LCD_H_RES as usize * 2 * FRAMEBUFFER_BATCH_LINES],
+            batch_first_line: 0,
+            batch_line_count: 0,
             result,
         }
+    }
+
+    fn flush_batch(&mut self) {
+        if self.batch_line_count == 0 {
+            return;
+        }
+
+        let byte_count = self.batch_line_count * LCD_H_RES as usize * 2;
+        if self.result.is_ok() {
+            *self.result = self
+                .fb
+                .draw_rgb565_rows(self.batch_first_line, &self.rgb565_batch[..byte_count]);
+        }
+        self.batch_line_count = 0;
     }
 }
 
@@ -349,13 +389,46 @@ impl LineBufferProvider for FbLineBuffer<'_> {
     ) {
         let pixel_count = range.len();
         debug_assert!(pixel_count <= self.pixels.len());
+        let can_batch = matches!(self.fb.pixel_format, PixelFormat::Rgb565)
+            && range.start == 0
+            && pixel_count == LCD_H_RES as usize;
+        if !can_batch
+            || (self.batch_line_count > 0 && line != self.batch_first_line + self.batch_line_count)
+        {
+            self.flush_batch();
+        }
 
         let pixels = &mut self.pixels[..pixel_count];
         render_fn(pixels);
 
-        if self.result.is_ok() {
+        if self.result.is_err() {
+            return;
+        }
+
+        if can_batch {
+            if self.batch_line_count == 0 {
+                self.batch_first_line = line;
+            }
+            let line_bytes = LCD_H_RES as usize * 2;
+            let batch_offset = self.batch_line_count * line_bytes;
+            for (index, pixel) in pixels.iter().enumerate() {
+                let pixel_bytes = pixel.0.to_be_bytes();
+                self.rgb565_batch[batch_offset + index * 2] = pixel_bytes[0];
+                self.rgb565_batch[batch_offset + index * 2 + 1] = pixel_bytes[1];
+            }
+            self.batch_line_count += 1;
+            if self.batch_line_count == FRAMEBUFFER_BATCH_LINES {
+                self.flush_batch();
+            }
+        } else {
             *self.result = self.fb.draw_line(pixels, range.start, line);
         }
+    }
+}
+
+impl Drop for FbLineBuffer<'_> {
+    fn drop(&mut self) {
+        self.flush_batch();
     }
 }
 
@@ -391,52 +464,32 @@ fn write_all(fd: libc::c_int, mut buf: &[u8]) -> IoResult<()> {
 }
 
 fn write_rgb565_line(fd: libc::c_int, pixels: &[Rgb565Pixel]) -> IoResult<()> {
-    let mut bytes = [0; 128];
-    let mut used = 0;
+    let mut bytes = [0; LCD_H_RES as usize * 2];
+    debug_assert!(pixels.len() * 2 <= bytes.len());
 
-    for pixel in pixels {
+    for (index, pixel) in pixels.iter().enumerate() {
         let pixel_bytes = pixel.0.to_be_bytes();
-        bytes[used] = pixel_bytes[0];
-        bytes[used + 1] = pixel_bytes[1];
-        used += 2;
-
-        if used == bytes.len() {
-            write_all(fd, &bytes)?;
-            used = 0;
-        }
+        bytes[index * 2] = pixel_bytes[0];
+        bytes[index * 2 + 1] = pixel_bytes[1];
     }
 
-    if used > 0 {
-        write_all(fd, &bytes[..used])?;
-    }
-
-    Ok(())
+    write_all(fd, &bytes[..pixels.len() * 2])
 }
 
 fn write_bgra8888_line(fd: libc::c_int, pixels: &[Rgb565Pixel]) -> IoResult<()> {
-    let mut bytes = [0; 128];
-    let mut used = 0;
+    let mut bytes = [0; LCD_H_RES as usize * 4];
+    debug_assert!(pixels.len() * 4 <= bytes.len());
 
-    for pixel in pixels {
+    for (index, pixel) in pixels.iter().enumerate() {
         let [b0, b1] = pixel.0.to_be_bytes();
         let rgb = u16::from_be_bytes([b0, b1]);
-        bytes[used] = ((rgb & 0x001f) << 3) as u8;
-        bytes[used + 1] = ((rgb & 0x07e0) >> 3) as u8;
-        bytes[used + 2] = ((rgb & 0xf800) >> 8) as u8;
-        bytes[used + 3] = 0xff;
-        used += 4;
-
-        if used == bytes.len() {
-            write_all(fd, &bytes)?;
-            used = 0;
-        }
+        bytes[index * 4] = ((rgb & 0x001f) << 3) as u8;
+        bytes[index * 4 + 1] = ((rgb & 0x07e0) >> 3) as u8;
+        bytes[index * 4 + 2] = ((rgb & 0xf800) >> 8) as u8;
+        bytes[index * 4 + 3] = 0xff;
     }
 
-    if used > 0 {
-        write_all(fd, &bytes[..used])?;
-    }
-
-    Ok(())
+    write_all(fd, &bytes[..pixels.len() * 4])
 }
 
 fn is_rgb565(info: &libc::fb_var_screeninfo) -> bool {
