@@ -1,0 +1,18 @@
+// Shared application palette. Theme.dark-mode is the single source of truth,
+// so switching it updates the launcher and every page immediately.
+
+export global Theme {
+    in-out property <bool> dark-mode: true;
+
+    out property <color> screen-background: dark-mode ? #0b1115 : #edf3f1;
+    out property <color> surface-background: dark-mode ? #111b20 : #ffffff;
+    out property <color> card-background: dark-mode ? #121b20 : #ffffff;
+    out property <color> raised-background: dark-mode ? #1d3037 : #e1ebe8;
+    out property <color> pressed-background: dark-mode ? #31464d : #cadbd7;
+    out property <color> border-color: dark-mode ? #293239 : #bdcfca;
+    out property <color> divider-color: dark-mode ? #2a3a40 : #d3dfdc;
+    out property <color> primary-text: dark-mode ? #edf4f1 : #172328;
+    out property <color> secondary-text: dark-mode ? #93a6a8 : #49605f;
+    out property <color> muted-text: dark-mode ? #6c7e82 : #65777b;
+    out property <color> accent-color: dark-mode ? #6fe0bd : #28765f;
+}

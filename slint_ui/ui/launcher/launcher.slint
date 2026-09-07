@@ -3,13 +3,14 @@
 
 import { DemoIcon } from "../components/demo-icon.slint";
 import { NavTab } from "../components/nav-tab.slint";
+import { Theme } from "../components/theme.slint";
 
 export component Launcher inherits Rectangle {
     callback open-app(int);
     in-out property <int> current-tab: 0;
     in-out property <float> tab-offset: 0.0;
 
-    background: #0b1115;
+    background: Theme.screen-background;
 
     property <int> active-tab: root.tab-offset > 0.5 ? 1 : 0;
 
@@ -17,19 +18,19 @@ export component Launcher inherits Rectangle {
     Rectangle {
         x: 0; y: 0;
         width: parent.width; height: 56px;
-        background: #111b20;
+        background: Theme.surface-background;
 
         Text {
             x: 24px; y: 0; width: 200px; height: parent.height;
             text: "LAUNCHER";
-            color: #edf4f1; font-size: 22px; font-weight: 800;
+            color: Theme.primary-text; font-size: 22px; font-weight: 800;
             vertical-alignment: center;
         }
     }
 
     Rectangle {
         x: 0; y: 55px; width: parent.width; height: 1px;
-        background: #2a3a40;
+        background: Theme.divider-color;
     }
 
     // Content area
@@ -148,11 +149,11 @@ export component Launcher inherits Rectangle {
     // Bottom nav bar
     Rectangle {
         x: 0; y: 431px; width: parent.width; height: 49px;
-        background: #111b20;
+        background: Theme.surface-background;
 
         Rectangle {
             x: 0; y: 0; width: parent.width; height: 1px;
-            background: #2a3a40;
+            background: Theme.divider-color;
         }
 
         NavTab {

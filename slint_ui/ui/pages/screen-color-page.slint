@@ -1,0 +1,119 @@
+// Global screen-theme control.
+// The light palette comes from the colleague's original Slint example.
+
+import { AppPage } from "../components/app-page.slint";
+import { Theme } from "../components/theme.slint";
+
+export component ScreenColorPage inherits AppPage {
+    title: "屏幕变色";
+    accent: Theme.accent-color;
+
+    Rectangle {
+        x: 28px;
+        y: 88px;
+        width: 424px;
+        height: 300px;
+        background: Theme.card-background;
+        border-width: 1px;
+        border-color: Theme.border-color;
+        border-radius: 14px;
+
+        Text {
+            x: 24px;
+            y: 28px;
+            width: 376px;
+            height: 34px;
+            text: "全局屏幕颜色";
+            color: Theme.primary-text;
+            font-size: 22px;
+            font-weight: 800;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+
+        Text {
+            x: 24px;
+            y: 72px;
+            width: 376px;
+            height: 24px;
+            text: Theme.dark-mode ? "当前：暗色" : "当前：亮色";
+            color: Theme.secondary-text;
+            font-size: 12px;
+            font-weight: 600;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+
+        Rectangle {
+            x: 88px;
+            y: 116px;
+            width: 248px;
+            height: 76px;
+            background: Theme.screen-background;
+            border-width: 1px;
+            border-color: Theme.border-color;
+            border-radius: 10px;
+
+            Rectangle {
+                x: 14px;
+                y: 14px;
+                width: 48px;
+                height: 48px;
+                background: Theme.accent-color;
+                border-radius: 8px;
+            }
+
+            Text {
+                x: 76px;
+                y: 0;
+                width: 154px;
+                height: parent.height;
+                text: Theme.dark-mode ? "DARK" : "LIGHT";
+                color: Theme.primary-text;
+                font-size: 18px;
+                font-weight: 800;
+                vertical-alignment: center;
+            }
+        }
+
+        Rectangle {
+            x: 72px;
+            y: 218px;
+            width: 280px;
+            height: 58px;
+            background: switch-area.pressed ? Theme.pressed-background : Theme.raised-background;
+            border-width: 1px;
+            border-color: Theme.border-color;
+            border-radius: 12px;
+
+            Text {
+                width: parent.width;
+                height: parent.height;
+                text: Theme.dark-mode ? "切换到亮色" : "切换到暗色";
+                color: Theme.accent-color;
+                font-size: 16px;
+                font-weight: 800;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+
+            switch-area := TouchArea {
+                width: parent.width;
+                height: parent.height;
+                clicked => { Theme.dark-mode = !Theme.dark-mode; }
+            }
+        }
+    }
+
+    Text {
+        x: 40px;
+        y: 410px;
+        width: 400px;
+        height: 28px;
+        text: "配色会应用到主页和所有功能页面";
+        color: Theme.muted-text;
+        font-size: 10px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}

@@ -27,9 +27,11 @@ action("generate_slint_ui") {
     "ui/components/app-page.slint",
     "ui/components/demo-icon.slint",
     "ui/components/nav-tab.slint",
+    "ui/components/theme.slint",
     "ui/launcher/launcher.slint",
     "ui/pages/demo-page.slint",
     "ui/pages/sched-mon-page.slint",
+    "ui/pages/screen-color-page.slint",
     "ui/pages/wifi-scan-page.slint",
   ]
   outputs = [ _slint_ui_generated ]
