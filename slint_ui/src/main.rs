@@ -26,22 +26,23 @@ mod wifi;
 
 use crate::app_window::MainWindow;
 use librs::{c_str::CStr, syscall::Syscall};
-use slint::platform::software_renderer::{LineBufferProvider, Rgb565Pixel};
-use slint::platform::{PointerEventButton, WindowEvent};
+use slint::platform::software_renderer::{
+    LineBufferProvider, PremultipliedRgbaColor, RepaintBufferType, Rgb565Pixel, TargetPixel,
+};
+use slint::platform::{PointerEventButton, WindowAdapter, WindowEvent};
 use slint::ComponentHandle;
 use std::cell::RefCell;
 use std::io::{Error, ErrorKind, Result as IoResult};
 use std::rc::Rc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
 const LCD_H_RES: u16 = 480;
 const LCD_V_RES: u16 = 480;
 const FRAME_DELAY_MS: libc::c_uint = 16;
 const UI_THREAD_STACK_SIZE: usize = 64 * 1024;
-// A 16-row RGB565 block is 15,360 bytes. It divides a 480-row frame evenly, reduces a full
-// refresh to 30 writes, and preserves enough of the 64 KiB UI stack for Slint's renderer.
-const FRAMEBUFFER_BATCH_LINES: usize = 16;
+// Keep the 64-row render stripe on the heap. A full RGB565 frame is emitted in
+// eight writes without consuming almost all of the UI thread's 64 KiB stack.
+const RENDER_BATCH_ROWS: usize = 64;
 const TOUCH_REPORT_SIZE: usize = 12;
 const TOUCH_REPORT_VERSION: u8 = 1;
 const TOUCH_DEVICE_PATH: &[u8] = b"/dev/cst9220\0";
@@ -52,15 +53,33 @@ const TOUCH_FLIP_X: bool = false;
 const TOUCH_FLIP_Y: bool = false;
 const TOUCH_SWAP_XY: bool = false;
 
-// Resetting multiple opened boxes produces many disjoint dirty rectangles. Rendering that
-// particular update as one full frame is faster than issuing a separate panel transaction for
-// every rectangle; ordinary interactions retain Slint's smaller reused-buffer updates.
-static FORCE_FULL_REDRAW: AtomicBool = AtomicBool::new(false);
-
 #[derive(Clone, Copy)]
 enum PixelFormat {
     Rgb565,
     Bgra8888,
+}
+
+/// RGB565 stored in the byte order expected by the panel.
+///
+/// ESP32-C6 is little-endian while the CO5300 pixel stream is big-endian. Letting
+/// Slint render into this type removes the per-frame RGB565 byte-swap pass.
+#[repr(transparent)]
+#[derive(Clone, Copy, Default)]
+struct PanelRgb565Pixel(u16);
+
+impl TargetPixel for PanelRgb565Pixel {
+    #[inline]
+    fn blend(&mut self, color: PremultipliedRgbaColor) {
+        let mut native = Rgb565Pixel(u16::from_be(self.0));
+        native.blend(color);
+        self.0 = native.0.to_be();
+    }
+
+    #[inline]
+    fn from_rgb(red: u8, green: u8, blue: u8) -> Self {
+        let native = Rgb565Pixel::from_rgb(red, green, blue);
+        Self(native.0.to_be())
+    }
 }
 
 impl PixelFormat {
@@ -304,12 +323,7 @@ impl FbFile {
         Ok(())
     }
 
-    fn draw_line(
-        &mut self,
-        pixels: &[Rgb565Pixel],
-        origin_x: usize,
-        origin_y: usize,
-    ) -> IoResult<()> {
+    fn draw_line(&mut self, pixels: &[u8], origin_x: usize, origin_y: usize) -> IoResult<()> {
         let dst_offset = origin_y as u64 * self.fixed_info.line_length as u64
             + origin_x as u64 * self.pixel_format.bytes_per_pixel() as u64;
         if dst_offset > libc::off_t::MAX as u64 {
@@ -322,72 +336,86 @@ impl FbFile {
             return Err(syscall_error(offset as libc::c_int));
         }
 
-        match self.pixel_format {
-            PixelFormat::Rgb565 => write_rgb565_line(self.fd, pixels),
-            PixelFormat::Bgra8888 => write_bgra8888_line(self.fd, pixels),
-        }
-    }
-
-    fn draw_rgb565_rows(&mut self, first_line: usize, bytes: &[u8]) -> IoResult<()> {
-        debug_assert!(matches!(self.pixel_format, PixelFormat::Rgb565));
-        let dst_offset = first_line as u64 * self.fixed_info.line_length as u64;
-        if dst_offset > libc::off_t::MAX as u64 {
-            return Err(Error::from_raw_os_error(libc::EINVAL));
-        }
-
-        let offset =
-            librs::syscall::sys::Sys::lseek(self.fd, dst_offset as libc::off_t, libc::SEEK_SET);
-        if offset < 0 {
-            return Err(syscall_error(offset as libc::c_int));
-        }
-
-        write_all(self.fd, bytes)
+        write_all(self.fd, pixels)
     }
 }
 
-/// Renders into one reusable scanline and batches complete RGB565 rows instead of allocating
+/// Renders into one reusable scanline and batches complete rows without allocating
 /// a full-frame pixel buffer.
 ///
 /// This keeps the software renderer's SRAM usage low. Slint 1.17 does not support `Path`
 /// items in `render_by_line`, so this backend intentionally does not accept `Path` items.
 struct FbLineBuffer<'a> {
     fb: &'a mut FbFile,
-    pixels: [Rgb565Pixel; LCD_H_RES as usize],
-    rgb565_batch: [u8; LCD_H_RES as usize * 2 * FRAMEBUFFER_BATCH_LINES],
-    batch_first_line: usize,
-    batch_line_count: usize,
+    output: [PanelRgb565Pixel; LCD_H_RES as usize],
+    row_cache: &'a mut Vec<u8>,
+    cached_row_start: usize,
+    cached_row_count: usize,
     result: &'a mut IoResult<()>,
 }
 
 impl<'a> FbLineBuffer<'a> {
-    fn new(fb: &'a mut FbFile, result: &'a mut IoResult<()>) -> Self {
+    fn new(fb: &'a mut FbFile, row_cache: &'a mut Vec<u8>, result: &'a mut IoResult<()>) -> Self {
+        row_cache.clear();
         Self {
             fb,
-            pixels: [Rgb565Pixel(0); LCD_H_RES as usize],
-            rgb565_batch: [0; LCD_H_RES as usize * 2 * FRAMEBUFFER_BATCH_LINES],
-            batch_first_line: 0,
-            batch_line_count: 0,
+            output: [PanelRgb565Pixel(0); LCD_H_RES as usize],
+            row_cache,
+            cached_row_start: 0,
+            cached_row_count: 0,
             result,
         }
     }
 
-    fn flush_batch(&mut self) {
-        if self.batch_line_count == 0 {
+    fn flush_rows(&mut self) {
+        if self.cached_row_count == 0 {
             return;
         }
 
-        let byte_count = self.batch_line_count * LCD_H_RES as usize * 2;
         if self.result.is_ok() {
-            *self.result = self
-                .fb
-                .draw_rgb565_rows(self.batch_first_line, &self.rgb565_batch[..byte_count]);
+            *self.result = self.fb.draw_line(self.row_cache, 0, self.cached_row_start);
         }
-        self.batch_line_count = 0;
+        self.row_cache.clear();
+        self.cached_row_count = 0;
+    }
+
+    fn cache_full_line(&mut self, line: usize) {
+        if self.cached_row_count == 0 {
+            self.cached_row_start = line;
+        } else if line != self.cached_row_start + self.cached_row_count {
+            self.flush_rows();
+            if self.result.is_err() {
+                return;
+            }
+            self.cached_row_start = line;
+        }
+
+        match self.fb.pixel_format {
+            PixelFormat::Rgb565 => {
+                let pixels = &self.output[..LCD_H_RES as usize];
+                // PanelRgb565Pixel is transparent over u16 and every element
+                // was initialized by Slint before this copy.
+                let bytes = unsafe {
+                    core::slice::from_raw_parts(
+                        pixels.as_ptr().cast::<u8>(),
+                        core::mem::size_of_val(pixels),
+                    )
+                };
+                self.row_cache.extend_from_slice(bytes);
+            }
+            PixelFormat::Bgra8888 => {
+                append_bgra8888(self.row_cache, &self.output[..LCD_H_RES as usize]);
+            }
+        }
+        self.cached_row_count += 1;
+        if self.cached_row_count == RENDER_BATCH_ROWS {
+            self.flush_rows();
+        }
     }
 }
 
 impl LineBufferProvider for FbLineBuffer<'_> {
-    type TargetPixel = Rgb565Pixel;
+    type TargetPixel = PanelRgb565Pixel;
 
     fn process_line(
         &mut self,
@@ -396,47 +424,57 @@ impl LineBufferProvider for FbLineBuffer<'_> {
         render_fn: impl FnOnce(&mut [Self::TargetPixel]),
     ) {
         let pixel_count = range.len();
-        debug_assert!(pixel_count <= self.pixels.len());
-        let can_batch = matches!(self.fb.pixel_format, PixelFormat::Rgb565)
-            && range.start == 0
-            && pixel_count == LCD_H_RES as usize;
-        if !can_batch
-            || (self.batch_line_count > 0 && line != self.batch_first_line + self.batch_line_count)
-        {
-            self.flush_batch();
+        debug_assert!(pixel_count <= self.output.len());
+        let is_full_width = range.start == 0 && pixel_count == LCD_H_RES as usize;
+
+        // Partial rows have a framebuffer stride between them and cannot be
+        // represented by the same compact write as consecutive full rows.
+        if !is_full_width {
+            self.flush_rows();
         }
 
-        let pixels = &mut self.pixels[..pixel_count];
+        let pixels = &mut self.output[..pixel_count];
         render_fn(pixels);
 
-        if self.result.is_err() {
-            return;
-        }
-
-        if can_batch {
-            if self.batch_line_count == 0 {
-                self.batch_first_line = line;
+        if self.result.is_ok() {
+            if is_full_width {
+                self.cache_full_line(line);
+            } else {
+                match self.fb.pixel_format {
+                    PixelFormat::Rgb565 => {
+                        let bytes = unsafe {
+                            core::slice::from_raw_parts(
+                                pixels.as_ptr().cast::<u8>(),
+                                core::mem::size_of_val(pixels),
+                            )
+                        };
+                        *self.result = self.fb.draw_line(bytes, range.start, line);
+                    }
+                    PixelFormat::Bgra8888 => {
+                        self.row_cache.clear();
+                        append_bgra8888(self.row_cache, pixels);
+                        *self.result = self.fb.draw_line(self.row_cache, range.start, line);
+                        self.row_cache.clear();
+                    }
+                }
             }
-            let line_bytes = LCD_H_RES as usize * 2;
-            let batch_offset = self.batch_line_count * line_bytes;
-            for (index, pixel) in pixels.iter().enumerate() {
-                let pixel_bytes = pixel.0.to_be_bytes();
-                self.rgb565_batch[batch_offset + index * 2] = pixel_bytes[0];
-                self.rgb565_batch[batch_offset + index * 2 + 1] = pixel_bytes[1];
-            }
-            self.batch_line_count += 1;
-            if self.batch_line_count == FRAMEBUFFER_BATCH_LINES {
-                self.flush_batch();
-            }
-        } else {
-            *self.result = self.fb.draw_line(pixels, range.start, line);
         }
     }
 }
 
 impl Drop for FbLineBuffer<'_> {
     fn drop(&mut self) {
-        self.flush_batch();
+        self.flush_rows();
+    }
+}
+
+fn append_bgra8888(bytes: &mut Vec<u8>, pixels: &[PanelRgb565Pixel]) {
+    for pixel in pixels {
+        let rgb = u16::from_be(pixel.0);
+        bytes.push(((rgb & 0x001f) << 3) as u8);
+        bytes.push(((rgb & 0x07e0) >> 3) as u8);
+        bytes.push(((rgb & 0xf800) >> 8) as u8);
+        bytes.push(0xff);
     }
 }
 
@@ -469,35 +507,6 @@ fn write_all(fd: libc::c_int, mut buf: &[u8]) -> IoResult<()> {
     }
 
     Ok(())
-}
-
-fn write_rgb565_line(fd: libc::c_int, pixels: &[Rgb565Pixel]) -> IoResult<()> {
-    let mut bytes = [0; LCD_H_RES as usize * 2];
-    debug_assert!(pixels.len() * 2 <= bytes.len());
-
-    for (index, pixel) in pixels.iter().enumerate() {
-        let pixel_bytes = pixel.0.to_be_bytes();
-        bytes[index * 2] = pixel_bytes[0];
-        bytes[index * 2 + 1] = pixel_bytes[1];
-    }
-
-    write_all(fd, &bytes[..pixels.len() * 2])
-}
-
-fn write_bgra8888_line(fd: libc::c_int, pixels: &[Rgb565Pixel]) -> IoResult<()> {
-    let mut bytes = [0; LCD_H_RES as usize * 4];
-    debug_assert!(pixels.len() * 4 <= bytes.len());
-
-    for (index, pixel) in pixels.iter().enumerate() {
-        let [b0, b1] = pixel.0.to_be_bytes();
-        let rgb = u16::from_be_bytes([b0, b1]);
-        bytes[index * 4] = ((rgb & 0x001f) << 3) as u8;
-        bytes[index * 4 + 1] = ((rgb & 0x07e0) >> 3) as u8;
-        bytes[index * 4 + 2] = ((rgb & 0xf800) >> 8) as u8;
-        bytes[index * 4 + 3] = 0xff;
-    }
-
-    write_all(fd, &bytes[..pixels.len() * 4])
 }
 
 fn is_rgb565(info: &libc::fb_var_screeninfo) -> bool {
@@ -574,6 +583,9 @@ impl slint::platform::Platform for BluekernelBackend {
 
     fn run_event_loop(&self) -> Result<(), slint::PlatformError> {
         let mut fb = FbFile::open().map_err(|err| slint::PlatformError::Other(err.to_string()))?;
+        let cache_capacity =
+            LCD_H_RES as usize * RENDER_BATCH_ROWS * fb.pixel_format.bytes_per_pixel() as usize;
+        let mut render_row_cache = Vec::with_capacity(cache_capacity);
         let mut touch = match TouchFile::open() {
             Ok(touch) => Some(touch),
             Err(error) => {
@@ -587,28 +599,8 @@ impl slint::platform::Platform for BluekernelBackend {
             slint::platform::update_timers_and_animations();
 
             if let Some(window) = self.window.borrow().clone() {
-                let mut draw_result = Ok(());
-                window.draw_if_needed(|renderer| {
-                    let force_full_redraw = FORCE_FULL_REDRAW.swap(false, Ordering::AcqRel);
-                    let previous_repaint_type = renderer.repaint_buffer_type();
-                    if force_full_redraw {
-                        renderer.set_repaint_buffer_type(
-                            slint::platform::software_renderer::RepaintBufferType::NewBuffer,
-                        );
-                    }
-
-                    // Render line-by-line to avoid a full-frame RGB565 allocation. This saves
-                    // substantial SRAM, at the cost of not supporting Slint `Path` items.
-                    renderer.render_by_line(FbLineBuffer::new(&mut fb, &mut draw_result));
-
-                    if force_full_redraw {
-                        renderer.set_repaint_buffer_type(previous_repaint_type);
-                    }
-                });
-                draw_result.map_err(|err| slint::PlatformError::Other(err.to_string()))?;
-
-                // Poll after drawing so a stalled I2C bus cannot prevent the
-                // initial UI frame from reaching the panel.
+                // Dispatch input before drawing so its visual state is visible
+                // in this iteration instead of one event-loop cycle later.
                 if let Some(touch) = touch.as_mut() {
                     match touch.dispatch(&window) {
                         Ok(()) => touch_error_reported = false,
@@ -620,7 +612,21 @@ impl slint::platform::Platform for BluekernelBackend {
                     }
                 }
 
-                let _ = librs::time::msleep(FRAME_DELAY_MS);
+                let has_animations = window.window().has_active_animations();
+                let mut draw_result = Ok(());
+                window.draw_if_needed(|renderer| {
+                    // Render line-by-line to avoid a full-frame RGB565 allocation. This saves
+                    // substantial SRAM, at the cost of not supporting Slint `Path` items.
+                    renderer.render_by_line(FbLineBuffer::new(
+                        &mut fb,
+                        &mut render_row_cache,
+                        &mut draw_result,
+                    ));
+                });
+                draw_result.map_err(|err| slint::PlatformError::Other(err.to_string()))?;
+
+                let delay = if has_animations { FRAME_DELAY_MS } else { 30 };
+                let _ = librs::time::msleep(delay);
             } else {
                 let _ = librs::time::msleep(FRAME_DELAY_MS);
             }
@@ -635,11 +641,6 @@ fn run_slint_ui() -> IoResult<()> {
         .map_err(|err| Error::new(ErrorKind::Other, err.to_string()))?;
     let ui = MainWindow::new().map_err(|err| Error::new(ErrorKind::Other, err.to_string()))?;
     let _wifi_scan_timer = wifi::install(&ui);
-    ui.on_reset_requested(|had_opened_boxes| {
-        if had_opened_boxes {
-            FORCE_FULL_REDRAW.store(true, Ordering::Release);
-        }
-    });
     ui.show()
         .map_err(|err| Error::new(ErrorKind::Other, err.to_string()))?;
 
