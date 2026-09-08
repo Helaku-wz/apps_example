@@ -1,6 +1,7 @@
 // Wi-Fi scan UI integrated into the launcher.
 // Keep this compatible with SoftwareRenderer::render_by_line: no Path items.
 
+import { AppPage } from "../components/app-page.slint";
 import { Theme } from "../components/theme.slint";
 
 export struct WifiNetwork {
@@ -11,117 +12,25 @@ export struct WifiNetwork {
     secure: bool,
 }
 
-export component WifiScanPage inherits Rectangle {
-    width: 480px;
-    height: 480px;
-    background: Theme.screen-background;
+export component WifiScanPage inherits AppPage {
+    title: "WIRELESS SCAN";
+    subtitle: "ESP32-C6  /  2.4 GHZ NETWORKS";
+    accent: #4bd6a2;
+    action-text: scanning ? "SCANNING..." : "SCAN AGAIN";
+    action-disabled: scanning;
 
     in property <[WifiNetwork]> networks;
     in-out property <bool> scanning: false;
     in-out property <int> result-count: 0;
     in-out property <string> status-text: "Preparing wireless scanner";
     callback scan-requested();
-    callback go-back();
 
-    Rectangle {
-        x: 0;
-        y: 0;
-        width: parent.width;
-        height: 82px;
-        background: Theme.surface-background;
+    action-clicked => { root.scan-requested(); }
 
-        Rectangle {
-            x: 0;
-            y: 0;
-            width: 48px;
-            height: parent.height;
-            background: back-area.pressed ? Theme.pressed-background : transparent;
-
-            Text {
-                width: parent.width;
-                height: parent.height;
-                text: "←";
-                color: #4bd6a2;
-                font-size: 24px;
-                font-weight: 700;
-                horizontal-alignment: center;
-                vertical-alignment: center;
-            }
-
-            back-area := TouchArea {
-                width: parent.width;
-                height: parent.height;
-                clicked => { root.go-back(); }
-            }
-        }
-
-        Rectangle {
-            x: 52px;
-            y: 18px;
-            width: 5px;
-            height: 46px;
-            background: #4bd6a2;
-            border-radius: 2px;
-        }
-
-        Text {
-            x: 70px;
-            y: 12px;
-            width: 260px;
-            height: 31px;
-            text: "WIRELESS SCAN";
-            color: Theme.primary-text;
-            font-size: 22px;
-            font-weight: 800;
-            vertical-alignment: center;
-        }
-
-        Text {
-            x: 71px;
-            y: 45px;
-            width: 260px;
-            height: 18px;
-            text: "ESP32-C6  /  2.4 GHZ NETWORKS";
-            color: Theme.muted-text;
-            font-size: 9px;
-            font-weight: 700;
-            vertical-alignment: center;
-        }
-
-        Rectangle {
-            x: 348px;
-            y: 18px;
-            width: 112px;
-            height: 46px;
-            background: root.scanning ? Theme.raised-background : scan-area.pressed ? Theme.pressed-background : Theme.raised-background;
-            border-width: 1px;
-            border-color: root.scanning ? Theme.border-color : Theme.accent-color;
-            border-radius: 9px;
-
-            Text {
-                width: parent.width;
-                height: parent.height;
-                text: root.scanning ? "SCANNING..." : "SCAN AGAIN";
-                color: root.scanning ? Theme.muted-text : Theme.accent-color;
-                font-size: 10px;
-                font-weight: 800;
-                horizontal-alignment: center;
-                vertical-alignment: center;
-            }
-
-            scan-area := TouchArea {
-                pointer-event(event) => {
-                    if event.kind == PointerEventKind.down && !root.scanning {
-                        root.scan-requested();
-                    }
-                }
-            }
-        }
-    }
-
+    // Status card
     Rectangle {
         x: 16px;
-        y: 94px;
+        y: 98px;
         width: 448px;
         height: 50px;
         background: Theme.card-background;
@@ -177,7 +86,7 @@ export component WifiScanPage inherits Rectangle {
 
     if root.result-count == 0: Rectangle {
         x: 16px;
-        y: 156px;
+        y: 160px;
         width: 448px;
         height: 250px;
         background: Theme.card-background;
@@ -226,7 +135,7 @@ export component WifiScanPage inherits Rectangle {
 
     for network[index] in root.networks: Rectangle {
         x: 16px;
-        y: 154px + index * 45px;
+        y: 158px + index * 45px;
         width: 448px;
         height: 39px;
         background: Theme.card-background;
@@ -322,6 +231,7 @@ export component WifiScanPage inherits Rectangle {
         }
     }
 
+    // Bottom status bar
     Rectangle {
         x: 0;
         y: 436px;

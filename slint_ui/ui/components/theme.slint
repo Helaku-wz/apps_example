@@ -1,18 +1,48 @@
-// Shared application palette. Theme.dark-mode is the single source of truth,
-// so switching it updates the launcher and every page immediately.
+// Shared application palette.
+// Switch between two themes via Theme.theme-name: "default" (grey) or "vivo" (deep-navy).
+// The theme-name property is the single source of truth, so switching it updates
+// the launcher and every page immediately.
 
 export global Theme {
-    in-out property <bool> dark-mode: true;
+    in-out property <string> theme-name: "default";
 
-    out property <color> screen-background: dark-mode ? #0b1115 : #edf3f1;
-    out property <color> surface-background: dark-mode ? #111b20 : #ffffff;
-    out property <color> card-background: dark-mode ? #121b20 : #ffffff;
-    out property <color> raised-background: dark-mode ? #1d3037 : #e1ebe8;
-    out property <color> pressed-background: dark-mode ? #31464d : #cadbd7;
-    out property <color> border-color: dark-mode ? #293239 : #bdcfca;
-    out property <color> divider-color: dark-mode ? #2a3a40 : #d3dfdc;
-    out property <color> primary-text: dark-mode ? #edf4f1 : #172328;
-    out property <color> secondary-text: dark-mode ? #93a6a8 : #49605f;
-    out property <color> muted-text: dark-mode ? #6c7e82 : #65777b;
-    out property <color> accent-color: dark-mode ? #6fe0bd : #28765f;
+    // -- default (grey) theme --
+    // Colors are the same as the original dark-mode: true palette.
+    out property <color> _screen-background-default: #0b1115;
+    out property <color> _surface-background-default: #111b20;
+    out property <color> _card-background-default: #121b20;
+    out property <color> _raised-background-default: #1d3037;
+    out property <color> _pressed-background-default: #31464d;
+    out property <color> _border-color-default: #293239;
+    out property <color> _divider-color-default: #2a3a40;
+    out property <color> _primary-text-default: #edf4f1;
+    out property <color> _secondary-text-default: #93a6a8;
+    out property <color> _muted-text-default: #6c7e82;
+    out property <color> _accent-color-default: #6fe0bd;
+
+    // -- vivo-dark theme --
+    out property <color> _screen-background-vivo: #0a0e27;
+    out property <color> _surface-background-vivo: #141a38;
+    out property <color> _card-background-vivo: #141a38;
+    out property <color> _raised-background-vivo: #1f2648;
+    out property <color> _pressed-background-vivo: #2a3158;
+    out property <color> _border-color-vivo: #2a3158;
+    out property <color> _divider-color-vivo: #2a3158;
+    out property <color> _primary-text-vivo: #e8eaf2;
+    out property <color> _secondary-text-vivo: #9aa0b4;
+    out property <color> _muted-text-vivo: #9aa0b4;
+    out property <color> _accent-color-vivo: #415fff;
+
+    // -- resolved palette (switch based on theme-name) --
+    out property <color> screen-background: theme-name == "vivo" ? _screen-background-vivo : _screen-background-default;
+    out property <color> surface-background: theme-name == "vivo" ? _surface-background-vivo : _surface-background-default;
+    out property <color> card-background: theme-name == "vivo" ? _card-background-vivo : _card-background-default;
+    out property <color> raised-background: theme-name == "vivo" ? _raised-background-vivo : _raised-background-default;
+    out property <color> pressed-background: theme-name == "vivo" ? _pressed-background-vivo : _pressed-background-default;
+    out property <color> border-color: theme-name == "vivo" ? _border-color-vivo : _border-color-default;
+    out property <color> divider-color: theme-name == "vivo" ? _divider-color-vivo : _divider-color-default;
+    out property <color> primary-text: theme-name == "vivo" ? _primary-text-vivo : _primary-text-default;
+    out property <color> secondary-text: theme-name == "vivo" ? _secondary-text-vivo : _secondary-text-default;
+    out property <color> muted-text: theme-name == "vivo" ? _muted-text-vivo : _muted-text-default;
+    out property <color> accent-color: theme-name == "vivo" ? _accent-color-vivo : _accent-color-default;
 }

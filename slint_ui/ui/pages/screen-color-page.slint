@@ -10,7 +10,7 @@ export component ScreenColorPage inherits AppPage {
 
     Rectangle {
         x: 28px;
-        y: 88px;
+        y: 98px;
         width: 424px;
         height: 300px;
         background: Theme.card-background;
@@ -36,7 +36,7 @@ export component ScreenColorPage inherits AppPage {
             y: 72px;
             width: 376px;
             height: 24px;
-            text: Theme.dark-mode ? "当前：暗色" : "当前：亮色";
+            text: Theme.theme-name == "vivo" ? "当前：vivo 深蓝" : "当前：灰色";
             color: Theme.secondary-text;
             font-size: 12px;
             font-weight: 600;
@@ -68,7 +68,7 @@ export component ScreenColorPage inherits AppPage {
                 y: 0;
                 width: 154px;
                 height: parent.height;
-                text: Theme.dark-mode ? "DARK" : "LIGHT";
+                text: Theme.theme-name == "vivo" ? "VIVO" : "GREY";
                 color: Theme.primary-text;
                 font-size: 18px;
                 font-weight: 800;
@@ -89,7 +89,7 @@ export component ScreenColorPage inherits AppPage {
             Text {
                 width: parent.width;
                 height: parent.height;
-                text: Theme.dark-mode ? "切换到亮色" : "切换到暗色";
+                text: Theme.theme-name == "vivo" ? "切换到灰色" : "切换到 vivo 深蓝";
                 color: Theme.accent-color;
                 font-size: 16px;
                 font-weight: 800;
@@ -100,7 +100,7 @@ export component ScreenColorPage inherits AppPage {
             switch-area := TouchArea {
                 width: parent.width;
                 height: parent.height;
-                clicked => { Theme.dark-mode = !Theme.dark-mode; }
+                clicked => { Theme.theme-name = Theme.theme-name == "vivo" ? "default" : "vivo"; }
             }
         }
     }

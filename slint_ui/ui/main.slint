@@ -12,7 +12,7 @@ import { WifiScanPage, WifiNetwork } from "./pages/wifi-scan-page.slint";
 export component MainWindow inherits Window {
     width: 480px;
     height: 480px;
-    background: Theme.screen-background;
+    background: transparent;
     default-font-size: 11px;
 
     property <int> current-app: -1;  // -1 = launcher, 6+ = app pages
@@ -24,7 +24,15 @@ export component MainWindow inherits Window {
     in-out property <int> result-count: 0;
     in-out property <string> status-text: "Preparing wireless scanner";
     callback scan-requested();
-    callback reset-requested(bool);
+    callback full-redraw-requested();
+
+    // Compact framebuffer write() calls cannot encode a multi-row rectangle
+    // with a partial row width. Request one full-width frame for UI changes
+    // that affect most of the display, then return to partial rendering.
+    property <string> active-theme: Theme.theme-name;
+    changed current-app => { root.full-redraw-requested(); }
+    changed tab-offset => { root.full-redraw-requested(); }
+    changed active-theme => { root.full-redraw-requested(); }
 
     // Launcher
     if current-app == -1: Launcher {
@@ -39,9 +47,8 @@ export component MainWindow inherits Window {
     if current-app == 8: DemoPage { title: "文件 IO";    accent: #f0bd62;  go-back => { root.current-app = -1; } }
     if current-app == 9: ScreenColorPage { go-back => { root.current-app = -1; } }
     if current-app == 10: DemoPage { title: "背光控制";  accent: #f0bd62;  go-back => { root.current-app = -1; } }
-    if current-app == 11: DemoPage { title: "背景图";    accent: #cf8ff2;  go-back => { root.current-app = -1; } }
     // 外设 demo pages
-    if current-app == 12: WifiScanPage {
+    if current-app == 11: WifiScanPage {
         networks: root.networks;
         scanning <=> root.scanning;
         result-count <=> root.result-count;
@@ -49,8 +56,8 @@ export component MainWindow inherits Window {
         scan-requested => { root.scan-requested(); }
         go-back => { root.current-app = -1; }
     }
-    if current-app == 13: DemoPage { title: "IMU Sensors"; accent: #f08091; go-back => { root.current-app = -1; } }
-    if current-app == 14: DemoPage { title: "SD 卡";     accent: #f0bd62;  go-back => { root.current-app = -1; } }
-    if current-app == 15: DemoPage { title: "HTTP GET";  accent: #5ca9ff;  go-back => { root.current-app = -1; } }
-    if current-app == 16: DemoPage { title: "音频";      accent: #cf8ff2;  go-back => { root.current-app = -1; } }
+    if current-app == 12: DemoPage { title: "IMU Sensors"; accent: #f08091; go-back => { root.current-app = -1; } }
+    if current-app == 13: DemoPage { title: "SD 卡";     accent: #f0bd62;  go-back => { root.current-app = -1; } }
+    if current-app == 14: DemoPage { title: "HTTP GET";  accent: #5ca9ff;  go-back => { root.current-app = -1; } }
+    if current-app == 15: DemoPage { title: "音频";      accent: #cf8ff2;  go-back => { root.current-app = -1; } }
 }

@@ -10,32 +10,13 @@ export component Launcher inherits Rectangle {
     in-out property <int> current-tab: 0;
     in-out property <float> tab-offset: 0.0;
 
-    background: Theme.screen-background;
+    background: transparent;
 
     property <int> active-tab: root.tab-offset > 0.5 ? 1 : 0;
 
-    // Top bar
-    Rectangle {
-        x: 0; y: 0;
-        width: parent.width; height: 56px;
-        background: Theme.surface-background;
-
-        Text {
-            x: 24px; y: 0; width: 200px; height: parent.height;
-            text: "LAUNCHER";
-            color: Theme.primary-text; font-size: 22px; font-weight: 800;
-            vertical-alignment: center;
-        }
-    }
-
-    Rectangle {
-        x: 0; y: 55px; width: parent.width; height: 1px;
-        background: Theme.divider-color;
-    }
-
     // Content area
     Rectangle {
-        x: 0; y: 56px; width: parent.width; height: 375px;
+        x: 0; y: 0; width: parent.width; height: 431px;
         clip: true;
 
         // Swipe gesture for tab switching
@@ -72,7 +53,7 @@ export component Launcher inherits Rectangle {
             width: 960px;
             height: parent.height;
 
-            // 内核 tab page — 5 demos in 2x3 grid
+            // 内核 tab page — 4 demos in 2x2 grid
             Rectangle {
                 x: 0; y: 0; width: 480px; height: parent.height;
 
@@ -100,13 +81,7 @@ export component Launcher inherits Rectangle {
                     accent: #f0bd62;
                     clicked => { root.open-app(10); }
                 }
-                DemoIcon {
-                    x: 168px; y: 212px;
-                    icon-text: "▣"; label: "背景图";
-                    accent: #cf8ff2;
-                    clicked => { root.open-app(11); }
                 }
-            }
 
             // 外设 tab page — 5 demos in 2x3 grid
             Rectangle {
@@ -116,31 +91,31 @@ export component Launcher inherits Rectangle {
                     x: 24px;  y: 44px;
                     icon-text: "≋"; label: "Wi-Fi 扫描";
                     accent: #6fe0bd;
-                    clicked => { root.open-app(12); }
+                    clicked => { root.open-app(11); }
                 }
                 DemoIcon {
                     x: 168px; y: 44px;
                     icon-text: "◈"; label: "IMU Sensors";
                     accent: #f08091;
-                    clicked => { root.open-app(13); }
+                    clicked => { root.open-app(12); }
                 }
                 DemoIcon {
                     x: 312px; y: 44px;
                     icon-text: "▤"; label: "SD 卡";
                     accent: #f0bd62;
-                    clicked => { root.open-app(14); }
+                    clicked => { root.open-app(13); }
                 }
                 DemoIcon {
                     x: 24px;  y: 212px;
                     icon-text: "◎"; label: "HTTP GET";
                     accent: #5ca9ff;
-                    clicked => { root.open-app(15); }
+                    clicked => { root.open-app(14); }
                 }
                 DemoIcon {
                     x: 168px; y: 212px;
                     icon-text: "♪"; label: "音频";
                     accent: #cf8ff2;
-                    clicked => { root.open-app(16); }
+                    clicked => { root.open-app(15); }
                 }
             }
         }
@@ -148,7 +123,7 @@ export component Launcher inherits Rectangle {
 
     // Bottom nav bar
     Rectangle {
-        x: 0; y: 431px; width: parent.width; height: 49px;
+        x: 0; y: 431px; width: parent.width; height: 56px;
         background: Theme.surface-background;
 
         Rectangle {

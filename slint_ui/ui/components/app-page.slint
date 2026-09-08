@@ -7,9 +7,13 @@ import { Theme } from "theme.slint";
 export component AppPage inherits Rectangle {
     in property <string> title;
     in property <color> accent;
+    in property <string> subtitle: "";
+    in property <string> action-text: "";
+    in property <bool> action-disabled: false;
     callback go-back();
+    callback action-clicked();
 
-    background: Theme.screen-background;
+    background: transparent;
 
     // Swipe-right gesture to go back
     touch-gesture := TouchArea {
@@ -32,25 +36,24 @@ export component AppPage inherits Rectangle {
         }
     }
 
-    // Title bar
+    // Title bar (WifiScanPage style)
     Rectangle {
         x: 0;
         y: 0;
         width: parent.width;
-        height: 52px;
+        height: 82px;
         background: Theme.surface-background;
 
         Rectangle {
             x: 0;
             y: 0;
             width: 48px;
-            height: 52px;
+            height: parent.height;
+            background: back-area.pressed ? Theme.pressed-background : transparent;
 
             Text {
-                x: 8px;
-                y: 8px;
-                width: 36px;
-                height: 36px;
+                width: parent.width;
+                height: parent.height;
                 text: "←";
                 color: root.accent;
                 font-size: 24px;
@@ -66,21 +69,72 @@ export component AppPage inherits Rectangle {
             }
         }
 
+        Rectangle {
+            x: 52px;
+            y: 18px;
+            width: 5px;
+            height: 46px;
+            background: root.accent;
+            border-radius: 2px;
+        }
+
         Text {
-            x: 48px;
-            y: 0;
-            width: parent.width - 48px;
-            height: parent.height;
+            x: 70px;
+            y: root.subtitle != "" ? 12px : 0;
+            width: root.action-text != "" ? 260px : 380px;
+            height: root.subtitle != "" ? 31px : parent.height;
             text: root.title;
             color: Theme.primary-text;
-            font-size: 18px;
+            font-size: 22px;
+            font-weight: 800;
+            vertical-alignment: center;
+        }
+
+        if root.subtitle != "" : Text {
+            x: 71px;
+            y: 45px;
+            width: root.action-text != "" ? 260px : 380px;
+            height: 18px;
+            text: root.subtitle;
+            color: Theme.muted-text;
+            font-size: 9px;
             font-weight: 700;
             vertical-alignment: center;
         }
 
+        if root.action-text != "" : Rectangle {
+            x: 348px;
+            y: 18px;
+            width: 112px;
+            height: 46px;
+            background: root.action-disabled ? Theme.raised-background : action-area.pressed ? Theme.pressed-background : Theme.raised-background;
+            border-width: 1px;
+            border-color: root.action-disabled ? Theme.border-color : root.accent;
+            border-radius: 9px;
+
+            Text {
+                width: parent.width;
+                height: parent.height;
+                text: root.action-text;
+                color: root.action-disabled ? Theme.muted-text : root.accent;
+                font-size: 10px;
+                font-weight: 800;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+
+            action-area := TouchArea {
+                pointer-event(event) => {
+                    if event.kind == PointerEventKind.down && !root.action-disabled {
+                        root.action-clicked();
+                    }
+                }
+            }
+        }
+
         Rectangle {
             x: 0;
-            y: 51px;
+            y: 81px;
             width: parent.width;
             height: 1px;
             background: Theme.divider-color;
