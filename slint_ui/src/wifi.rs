@@ -22,8 +22,6 @@ use std::rc::Rc;
 
 const SCAN_POLL_ATTEMPTS: usize = 25;
 const SCAN_POLL_INTERVAL_MS: u128 = 200;
-const WIFI_STARTUP_DELAY_MS: u128 = 1000;
-const AUTO_SCAN_INTERVAL_MS: u128 = 15_000;
 const SCAN_BUFFER_SIZE: usize = 2048;
 const MAX_VISIBLE_NETWORKS: usize = 6;
 
@@ -56,8 +54,6 @@ struct WifiScanner {
     scan_buffer: Vec<u8>,
     state: WifiScanState,
     scan_requested: bool,
-    first_scan_at: u128,
-    next_auto_scan_at: u128,
 }
 
 impl SocketFd {
@@ -330,14 +326,11 @@ fn show_scan_result(ui: &MainWindow, result: IoResult<WifiScanResults>) {
 
 impl WifiScanner {
     fn new() -> Self {
-        let first_scan_at = uptime_millis().saturating_add(WIFI_STARTUP_DELAY_MS);
         Self {
             socket: None,
             scan_buffer: vec![0u8; SCAN_BUFFER_SIZE],
             state: WifiScanState::Idle,
-            scan_requested: true,
-            first_scan_at,
-            next_auto_scan_at: first_scan_at,
+            scan_requested: false,
         }
     }
 
@@ -353,7 +346,6 @@ impl WifiScanner {
 
     fn finish_scan(&mut self, ui: &MainWindow, result: IoResult<WifiScanResults>) {
         self.state = WifiScanState::Idle;
-        self.next_auto_scan_at = uptime_millis().saturating_add(AUTO_SCAN_INTERVAL_MS);
         show_scan_result(ui, result);
     }
 
@@ -387,9 +379,7 @@ impl WifiScanner {
         let now = uptime_millis();
         match self.state {
             WifiScanState::Idle => {
-                if now < self.first_scan_at
-                    || (!self.scan_requested && now < self.next_auto_scan_at)
-                {
+                if !self.scan_requested {
                     return;
                 }
                 self.start_scan(ui, now);

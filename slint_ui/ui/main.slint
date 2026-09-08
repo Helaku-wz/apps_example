@@ -25,6 +25,14 @@ export component MainWindow inherits Window {
     in-out property <string> status-text: "Preparing wireless scanner";
     callback scan-requested();
 
+    // Scan once when the Wi-Fi page is entered. The page's action button can
+    // request another scan; no scanning runs periodically in the background.
+    changed current-app => {
+        if root.current-app == 11 {
+            root.scan-requested();
+        }
+    }
+
     // Launcher
     if current-app == -1: Launcher {
         current-tab <=> root.current-tab;
