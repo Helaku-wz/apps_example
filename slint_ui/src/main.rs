@@ -21,14 +21,14 @@ extern crate rsrt;
 mod app_window {
     include!(env!("SLINT_UI_GENERATED"));
 }
+mod background;
 mod math;
 mod wifi;
 
+use crate::background::PanelRgb565Pixel;
 use crate::app_window::MainWindow;
 use librs::{c_str::CStr, syscall::Syscall};
-use slint::platform::software_renderer::{
-    LineBufferProvider, PremultipliedRgbaColor, RepaintBufferType, Rgb565Pixel, TargetPixel,
-};
+use slint::platform::software_renderer::{LineBufferProvider, RepaintBufferType};
 use slint::platform::{PointerEventButton, WindowAdapter, WindowEvent};
 use slint::ComponentHandle;
 use std::cell::RefCell;
@@ -57,29 +57,6 @@ const TOUCH_SWAP_XY: bool = false;
 enum PixelFormat {
     Rgb565,
     Bgra8888,
-}
-
-/// RGB565 stored in the byte order expected by the panel.
-///
-/// ESP32-C6 is little-endian while the CO5300 pixel stream is big-endian. Letting
-/// Slint render into this type removes the per-frame RGB565 byte-swap pass.
-#[repr(transparent)]
-#[derive(Clone, Copy, Default)]
-struct PanelRgb565Pixel(u16);
-
-impl TargetPixel for PanelRgb565Pixel {
-    #[inline]
-    fn blend(&mut self, color: PremultipliedRgbaColor) {
-        let mut native = Rgb565Pixel(u16::from_be(self.0));
-        native.blend(color);
-        self.0 = native.0.to_be();
-    }
-
-    #[inline]
-    fn from_rgb(red: u8, green: u8, blue: u8) -> Self {
-        let native = Rgb565Pixel::from_rgb(red, green, blue);
-        Self(native.0.to_be())
-    }
 }
 
 impl PixelFormat {
@@ -417,6 +394,10 @@ impl<'a> FbLineBuffer<'a> {
 impl LineBufferProvider for FbLineBuffer<'_> {
     type TargetPixel = PanelRgb565Pixel;
 
+    fn provides_background(&self) -> bool {
+        true
+    }
+
     fn process_line(
         &mut self,
         line: usize,
@@ -434,6 +415,7 @@ impl LineBufferProvider for FbLineBuffer<'_> {
         }
 
         let pixels = &mut self.output[..pixel_count];
+        background::copy_background_line(pixels, line, range.start);
         render_fn(pixels);
 
         if self.result.is_ok() {
