@@ -22,6 +22,7 @@ mod app_window {
     include!(env!("SLINT_UI_GENERATED"));
 }
 mod background;
+mod file_io;
 mod math;
 mod wifi;
 
@@ -623,6 +624,7 @@ fn run_slint_ui() -> IoResult<()> {
         .map_err(|err| Error::new(ErrorKind::Other, err.to_string()))?;
     let ui = MainWindow::new().map_err(|err| Error::new(ErrorKind::Other, err.to_string()))?;
     let _wifi_scan_timer = wifi::install(&ui);
+    let _file_io_timer = file_io::install(&ui);
     ui.show()
         .map_err(|err| Error::new(ErrorKind::Other, err.to_string()))?;
 

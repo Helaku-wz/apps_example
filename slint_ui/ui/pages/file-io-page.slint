@@ -1,0 +1,223 @@
+// File IO write-benchmark UI integrated into the launcher.
+// Writes 4 KiB blocks to a file until 512 KiB (128 blocks) is reached and
+// shows live throughput + progress. Each block is written in a timer tick so
+// the progress bar is visible; the reported rate is the real write latency.
+// Compatible with SoftwareRenderer::render_by_line: no Path items.
+
+import { AppPage } from "../components/app-page.slint";
+import { Theme } from "../components/theme.slint";
+
+export component FileIoPage inherits AppPage {
+    title: "FILE IO";
+    subtitle: "4 KIB BLOCK  /  128 KIB TOTAL";
+    accent: #f0bd62;
+    action-text: running ? "RUNNING..." : "START";
+    action-disabled: running;
+
+    in-out property <bool> running: false;
+    in-out property <int> bytes-written: 0;    // KiB written so far
+    in-out property <int> total-bytes: 128;    // KiB target
+    in-out property <int> speed-kbps: 0;       // KiB/s, live
+    in-out property <int> avg-speed-kbps: 0;    // KiB/s, running average
+    in-out property <int> block-count: 0;      // blocks written
+    in-out property <string> status-text: "Tap START to benchmark";
+    callback start-requested();
+
+    action-clicked => { root.start-requested(); }
+
+    // fraction of the target written, 0.0 .. 1.0
+    property <float> progress: root.total-bytes > 0
+        ? clamp(root.bytes-written / root.total-bytes, 0, 1)
+        : 0;
+
+    // Throughput card
+    Rectangle {
+        x: 16px;
+        y: 98px;
+        width: 448px;
+        height: 76px;
+        background: Theme.card-background;
+        border-width: 1px;
+        border-color: Theme.border-color;
+        border-radius: 9px;
+
+        // Live speed
+        Rectangle {
+            x: 13px;
+            y: 12px;
+            width: 52px;
+            height: 52px;
+            background: root.running ? #3a2f12 : Theme.raised-background;
+            border-radius: 9px;
+
+            Text {
+                width: parent.width;
+                y: 9px;
+                height: 26px;
+                text: root.speed-kbps;
+                color: root.running ? #f0c95f : #82969c;
+                font-size: 17px;
+                font-weight: 800;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+            Text {
+                width: parent.width;
+                y: 36px;
+                height: 12px;
+                text: "KB/S";
+                color: Theme.muted-text;
+                font-size: 7px;
+                font-weight: 700;
+                horizontal-alignment: center;
+            }
+        }
+
+        Text {
+            x: 76px;
+            y: 11px;
+            width: 356px;
+            height: 20px;
+            text: "Live write speed";
+            color: Theme.primary-text;
+            font-size: 11px;
+            font-weight: 700;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        Text {
+            x: 76px;
+            y: 31px;
+            width: 356px;
+            height: 17px;
+            text: "avg " + root.avg-speed-kbps + " KB/s   ·   " + root.block-count + " blocks";
+            color: Theme.muted-text;
+            font-size: 8px;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        Text {
+            x: 76px;
+            y: 50px;
+            width: 356px;
+            height: 17px;
+            text: root.status-text;
+            color: root.running ? #d5b95e : Theme.muted-text;
+            font-size: 8px;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+    }
+
+    // Progress card
+    Rectangle {
+        x: 16px;
+        y: 184px;
+        width: 448px;
+        height: 110px;
+        background: Theme.card-background;
+        border-width: 1px;
+        border-color: Theme.border-color;
+        border-radius: 9px;
+
+        Text {
+            x: 20px;
+            y: 14px;
+            width: 408px;
+            height: 20px;
+            text: "Write progress";
+            color: Theme.primary-text;
+            font-size: 11px;
+            font-weight: 700;
+            vertical-alignment: center;
+        }
+
+        // byte counter
+        Text {
+            x: 20px;
+            y: 36px;
+            height: 20px;
+            text: root.bytes-written + " / " + root.total-bytes + " KB";
+            color: root.accent;
+            font-size: 12px;
+            font-weight: 800;
+            vertical-alignment: center;
+        }
+        Text {
+            x: 0;
+            y: 36px;
+            width: 428px;
+            height: 20px;
+            text: (root.progress * 100) + "%";
+            color: Theme.muted-text;
+            font-size: 10px;
+            font-weight: 700;
+            horizontal-alignment: right;
+            vertical-alignment: center;
+        }
+
+        // progress track — two Rectangles (no Path, render_by_line safe)
+        Rectangle {
+            x: 20px;
+            y: 64px;
+            width: 408px;
+            height: 14px;
+            background: Theme.raised-background;
+            border-radius: 7px;
+        }
+        Rectangle {
+            x: 20px;
+            y: 64px;
+            width: 408px * root.progress;
+            height: 14px;
+            background: root.accent;
+            border-radius: 7px;
+        }
+
+        Text {
+            x: 20px;
+            y: 84px;
+            width: 408px;
+            height: 16px;
+            text: root.running
+                ? "writing 4 KiB blocks to /tmp/io_bench.bin (tmpfs)"
+                : root.bytes-written >= root.total-bytes
+                    ? "done — tap START to run again"
+                    : "ready";
+            color: Theme.muted-text;
+            font-size: 8px;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+    }
+
+    // Bottom status bar
+    Rectangle {
+        x: 0;
+        y: 436px;
+        width: parent.width;
+        height: 44px;
+        background: Theme.surface-background;
+
+        Rectangle {
+            x: 20px;
+            y: 14px;
+            width: 5px;
+            height: 16px;
+            background: root.running ? #d5b95e : root.accent;
+            border-radius: 2px;
+        }
+
+        Text {
+            x: 36px;
+            y: 7px;
+            width: 424px;
+            height: 30px;
+            text: "tmpfs  /  4 KiB block  /  128 KiB total";
+            color: Theme.muted-text;
+            font-size: 8px;
+            font-weight: 600;
+            vertical-alignment: center;
+        }
+    }
+}

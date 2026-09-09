@@ -5,6 +5,7 @@
 import { Launcher } from "./launcher/launcher.slint";
 import { Theme } from "./components/theme.slint";
 import { DemoPage } from "./pages/demo-page.slint";
+import { FileIoPage } from "./pages/file-io-page.slint";
 import { SchedMonPage } from "./pages/sched-mon-page.slint";
 import { ScreenColorPage } from "./pages/screen-color-page.slint";
 import { WifiScanPage, WifiNetwork } from "./pages/wifi-scan-page.slint";
@@ -25,9 +26,22 @@ export component MainWindow inherits Window {
     in-out property <string> status-text: "Preparing wireless scanner";
     callback scan-requested();
 
+    in-out property <bool> io-running: false;
+    in-out property <int> io-bytes-written: 0;   // KiB
+    in-out property <int> io-total-bytes: 128;   // KiB
+    in-out property <int> io-speed-kbps: 0;      // KiB/s, live
+    in-out property <int> io-avg-speed-kbps: 0;  // KiB/s, running average
+    in-out property <int> io-block-count: 0;
+    in-out property <string> io-status-text: "Tap START to benchmark";
+    callback io-start-requested();
+
     // Scan once when the Wi-Fi page is entered. The page's action button can
     // request another scan; no scanning runs periodically in the background.
+    // The File IO benchmark starts when its page is entered for the same reason.
     changed current-app => {
+        if root.current-app == 8 {
+            root.io-start-requested();
+        }
         if root.current-app == 11 {
             root.scan-requested();
         }
@@ -43,7 +57,17 @@ export component MainWindow inherits Window {
     // App pages
     if current-app == 6: SchedMonPage { go-back => { root.current-app = -1; } }
     if current-app == 7: DemoPage { title: "CPU/Memory"; accent: #6fe0bd;  go-back => { root.current-app = -1; } }
-    if current-app == 8: DemoPage { title: "文件 IO";    accent: #f0bd62;  go-back => { root.current-app = -1; } }
+    if current-app == 8: FileIoPage {
+        running <=> root.io-running;
+        bytes-written <=> root.io-bytes-written;
+        total-bytes <=> root.io-total-bytes;
+        speed-kbps <=> root.io-speed-kbps;
+        avg-speed-kbps <=> root.io-avg-speed-kbps;
+        block-count <=> root.io-block-count;
+        status-text <=> root.io-status-text;
+        start-requested => { root.io-start-requested(); }
+        go-back => { root.current-app = -1; }
+    }
     if current-app == 9: ScreenColorPage { go-back => { root.current-app = -1; } }
     if current-app == 10: DemoPage { title: "背光控制";  accent: #f0bd62;  go-back => { root.current-app = -1; } }
     // 外设 demo pages

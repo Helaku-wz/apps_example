@@ -30,6 +30,7 @@ action("generate_slint_ui") {
     "ui/components/theme.slint",
     "ui/launcher/launcher.slint",
     "ui/pages/demo-page.slint",
+    "ui/pages/file-io-page.slint",
     "ui/pages/sched-mon-page.slint",
     "ui/pages/screen-color-page.slint",
     "ui/pages/wifi-scan-page.slint",
